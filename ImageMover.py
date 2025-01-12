@@ -66,7 +66,7 @@ class ImageThumbnail(QLabel):
         self.selected = False
         self.order = -1  # クリック順序を保持するプロパティ
         self.setFixedSize(200, 200)
-        self.setScaledContents(True)
+        self.setScaledContents(False)  # アスペクト比を維持するためにFalseに設定
         self.setPixmap(QPixmap(image_path).scaled(200, 200, Qt.AspectRatioMode.KeepAspectRatio))
         self.setToolTip(os.path.dirname(image_path))
 
@@ -109,6 +109,15 @@ class ImageThumbnail(QLabel):
             if main_window:
                 metadata = main_window.extract_metadata(self.image_path)
                 dialog = MetadataDialog(metadata)
+                dialog.exec()
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            main_window = self.window()
+            while main_window and not isinstance(main_window, MainWindow):
+                main_window = main_window.parent()
+            if main_window:
+                dialog = ImageDialog(self.image_path, main_window)
                 dialog.exec()
 
 class MainWindow(QMainWindow):
