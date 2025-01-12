@@ -255,10 +255,53 @@ class MainWindow(QMainWindow):
 
     def display_thumbnails(self):
         self.images = self.image_loader.images
+        
+        # 画像が0枚の場合、再読み込みボタンを表示
+        if len(self.images) == 0:
+            self.status_bar.showMessage("No images found. Please try again.")
+            self.show_reload_button()
+            return
+
         for i, image_path in enumerate(self.images):
             thumbnail = ImageThumbnail(image_path, self.grid_widget)
             self.grid_layout.addWidget(thumbnail, i // 5, i % 5)
+
         self.status_bar.showMessage(f"Total images: {len(self.images)}")
+
+    def load_images(self):
+        folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
+        if folder:
+            self.status_bar.showMessage("Loading images...")
+            self.clear_thumbnails()  # サムネイルをクリア
+            self.image_loader = ImageLoader(folder)
+            self.image_loader.update_progress.connect(self.update_image_count)
+            self.image_loader.finished.connect(self.display_thumbnails)
+            self.image_loader.start()
+
+    def display_thumbnails(self):
+        self.images = self.image_loader.images
+        
+        # 画像が0枚の場合、再読み込みボタンを表示
+        if len(self.images) == 0:
+            self.status_bar.showMessage("No images found. Please try again.")
+            self.show_reload_button()
+            return
+
+        for i, image_path in enumerate(self.images):
+            thumbnail = ImageThumbnail(image_path, self.grid_widget)
+            self.grid_layout.addWidget(thumbnail, i // 5, i % 5)
+
+        self.status_bar.showMessage(f"Total images: {len(self.images)}")
+
+    def show_reload_button(self):
+        reload_button = QPushButton("Reload")
+        reload_button.setStyleSheet("background-color: lightgray; font-size: 16px;")
+        reload_button.clicked.connect(self.load_images)
+        
+        # 中央にボタンを配置
+        for i in reversed(range(self.grid_layout.count())):
+            self.grid_layout.itemAt(i).widget().setParent(None)
+        self.grid_layout.addWidget(reload_button, 0, 0, Qt.AlignmentFlag.AlignCenter)
 
     def search_images(self):
         query = self.search_box.text()
