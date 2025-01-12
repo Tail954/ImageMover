@@ -13,19 +13,22 @@ from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 class ImageLoader(QThread):
-    update_progress = pyqtSignal(int)
+    update_progress = pyqtSignal(int, int)  # 読み込み済み枚数と総枚数を送信
 
     def __init__(self, folder):
         super().__init__()
         self.folder = folder
         self.images = []
+        self.total_files = 0
 
     def run(self):
         for root, _, files in os.walk(self.folder):
+            self.total_files += len([file for file in files if file.lower().endswith(('.png', '.jpeg', '.jpg', '.webp'))])
+        for root, _, files in os.walk(self.folder):
             for file in files:
-                if file.lower().endswith(('.png', '.jpeg', '.jpg', '.webp')):
+                if file.lower().endswith(('.png', '.jpeg', '.jpg', '.webp')): 
                     self.images.append(os.path.join(root, file))
-                    self.update_progress.emit(len(self.images))
+                    self.update_progress.emit(len(self.images), self.total_files)
 
 class MetadataDialog(QDialog):
     def __init__(self, metadata, parent=None):
@@ -182,15 +185,15 @@ class MainWindow(QMainWindow):
             self.image_loader.finished.connect(self.display_thumbnails)
             self.image_loader.start()
 
-    def update_image_count(self, count):
-        self.status_bar.showMessage(f"Loading images... {count} images loaded")
+    def update_image_count(self, loaded, total):
+        self.status_bar.showMessage(f"Loading images... {loaded}/{total} images loaded")
 
     def display_thumbnails(self):
         self.images = self.image_loader.images
         for i, image_path in enumerate(self.images):
             thumbnail = ImageThumbnail(image_path, self.grid_widget)
             self.grid_layout.addWidget(thumbnail, i // 5, i % 5)
-        self.status_bar.clearMessage()
+        self.status_bar.showMessage(f"Total images: {len(self.images)}")
 
     def search_images(self):
         query = self.search_box.text()
