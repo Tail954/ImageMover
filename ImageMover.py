@@ -7,10 +7,11 @@ from PIL import Image
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QFileDialog, QLabel, QPushButton,
     QVBoxLayout, QHBoxLayout, QRadioButton, QLineEdit, QTextEdit, QDialog,
-    QScrollArea, QWidget, QGridLayout, QButtonGroup, QStatusBar, QMessageBox
+    QScrollArea, QWidget, QGridLayout, QButtonGroup, QStatusBar, QMessageBox,
+    QTreeView, QSplitter
 )
-from PyQt6.QtGui import QImage, QPixmap
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QProcess
+from PyQt6.QtGui import QImage, QPixmap, QFileSystemModel
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QProcess, QDir
 
 class ImageLoader(QThread):
     update_progress = pyqtSignal(int, int)  # 読み込み済み枚数と総枚数を送信
@@ -144,10 +145,11 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Image Move/Copy Application")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 1500, 800)
         self.images = []
         self.copy_mode = False
         self.selection_order = []  # クリック順序を保持するリスト
+        self.current_folder = ""  # 現在のフォルダパスを保持
 
         self.initUI()
 
@@ -156,12 +158,35 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.central_widget)
         layout = QVBoxLayout(self.central_widget)
 
+        # スプリッターを作成して、フォルダツリーと画像表示部分を分割
+        splitter = QSplitter(self)
+        layout.addWidget(splitter)
+
+        # フォルダツリーを作成
+        self.folder_model = QFileSystemModel()
+        self.folder_model.setRootPath("")  # 初期化時は空文字列を設定
+        self.folder_view = QTreeView()
+        self.folder_view.setModel(self.folder_model)
+        # 初期状態ではホームディレクトリを表示しない
+        self.folder_view.setRootIndex(self.folder_model.index(""))
+        self.folder_view.clicked.connect(self.on_folder_selected)
+
+        # カラムの幅を設定
+        self.folder_view.setColumnWidth(0, 150)  # Name列の幅
+        self.folder_view.setColumnWidth(1, 60)    # Size列
+        self.folder_view.setColumnWidth(2, 50)    # Type列
+        self.folder_view.setColumnWidth(3, 100)    # Date Modified列
+
+        # サムネイル表示エリアを作成
+        self.image_area_widget = QWidget()
+        image_layout = QVBoxLayout(self.image_area_widget)
+
         # Search section
         search_layout = QHBoxLayout()
         self.search_box = QLineEdit()
         self.search_button = QPushButton("Search")
         self.search_button.clicked.connect(self.search_images)
-        self.search_box.returnPressed.connect(self.search_button.click)  # EnterキーでSearchボタンをクリック
+        self.search_box.returnPressed.connect(self.search_button.click)
         self.and_radio = QRadioButton("and")
         self.or_radio = QRadioButton("or")
         self.or_radio.setChecked(True)
@@ -172,28 +197,28 @@ class MainWindow(QMainWindow):
         search_layout.addWidget(self.and_radio)
         search_layout.addWidget(self.or_radio)
         search_layout.addWidget(self.search_button)
-        layout.addLayout(search_layout)
+        image_layout.addLayout(search_layout)
 
         # Copy mode and UnSelect buttons
         button_layout = QHBoxLayout()
         self.select_all_button = QPushButton("Select All")
         self.select_all_button.clicked.connect(self.select_all)
-        self.unselect_button = QPushButton("deSelection")
+        self.unselect_button = QPushButton("DeSelect All")
         self.unselect_button.clicked.connect(self.unselect_all)
         self.copy_mode_button = QPushButton("Copy Mode")
         self.copy_mode_button.clicked.connect(self.toggle_copy_mode)
         button_layout.addWidget(self.select_all_button)
         button_layout.addWidget(self.unselect_button)
         button_layout.addWidget(self.copy_mode_button)
-        layout.addLayout(button_layout)
+        image_layout.addLayout(button_layout)
 
-        # Thumbnail grid
+        # サムネイル表示エリア
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.grid_widget = QWidget()
         self.grid_layout = QGridLayout(self.grid_widget)
         self.scroll_area.setWidget(self.grid_widget)
-        layout.addWidget(self.scroll_area)
+        image_layout.addWidget(self.scroll_area)
 
         # Move/Copy buttons
         move_copy_layout = QHBoxLayout()
@@ -210,6 +235,11 @@ class MainWindow(QMainWindow):
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
+        # スプリッターにフォルダツリーと画像表示エリアを追加
+        splitter.addWidget(self.folder_view)
+        splitter.addWidget(self.image_area_widget)
+        splitter.setSizes([250, 800])  # 初期サイズを設定
+
         # Load images on startup
         self.load_images()
         
@@ -219,6 +249,18 @@ class MainWindow(QMainWindow):
             widget = self.grid_layout.itemAt(i).widget()
             if widget:
                 widget.setParent(None)
+
+    def on_folder_selected(self, index):
+        folder_path = self.folder_model.filePath(index)
+        self.load_images_from_folder(folder_path)
+
+    def load_images_from_folder(self, folder):
+        self.status_bar.showMessage("Loading images...")
+        self.clear_thumbnails()  # サムネイルをクリア
+        self.image_loader = ImageLoader(folder)
+        self.image_loader.update_progress.connect(self.update_image_count)
+        self.image_loader.finished.connect(self.display_thumbnails)
+        self.image_loader.start()
 
     def select_all(self):
         for i in range(self.grid_layout.count()):
@@ -244,7 +286,21 @@ class MainWindow(QMainWindow):
     def load_images(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
         if folder:
+            self.current_folder = folder  # 選択されたフォルダパスを保存
+            # 選択したフォルダの親フォルダのパスを取得
+            parent_folder = os.path.dirname(folder)
+            
+            # フォルダツリーのルートパスを親フォルダに設定
+            self.folder_model.setRootPath(parent_folder)
+            self.folder_view.setRootIndex(self.folder_model.index(parent_folder))
+
+            # 選択したフォルダを展開して選択状態にする
+            folder_index = self.folder_model.index(folder)
+            self.folder_view.setCurrentIndex(folder_index)
+            self.folder_view.expand(folder_index)
+
             self.status_bar.showMessage("Loading images...")
+            self.clear_thumbnails()
             self.image_loader = ImageLoader(folder)
             self.image_loader.update_progress.connect(self.update_image_count)
             self.image_loader.finished.connect(self.display_thumbnails)
@@ -267,16 +323,6 @@ class MainWindow(QMainWindow):
             self.grid_layout.addWidget(thumbnail, i // 5, i % 5)
 
         self.status_bar.showMessage(f"Total images: {len(self.images)}")
-
-    def load_images(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
-        if folder:
-            self.status_bar.showMessage("Loading images...")
-            self.clear_thumbnails()  # サムネイルをクリア
-            self.image_loader = ImageLoader(folder)
-            self.image_loader.update_progress.connect(self.update_image_count)
-            self.image_loader.finished.connect(self.display_thumbnails)
-            self.image_loader.start()
 
     def display_thumbnails(self):
         self.images = self.image_loader.images
