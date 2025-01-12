@@ -158,9 +158,15 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.central_widget)
         layout = QVBoxLayout(self.central_widget)
 
+        # フォルダツリーの幅を０にするトグルボタンを追加
+        self.toggle_button = QPushButton("<<")
+        self.toggle_button.setFixedWidth(40)  # ボタンの幅を40に設定
+        self.toggle_button.clicked.connect(self.toggle_folder_tree)
+        layout.addWidget(self.toggle_button)
+
         # スプリッターを作成して、フォルダツリーと画像表示部分を分割
-        splitter = QSplitter(self)
-        layout.addWidget(splitter)
+        self.splitter = QSplitter(self)
+        layout.addWidget(self.splitter)
 
         # フォルダツリーを作成
         self.folder_model = QFileSystemModel()
@@ -236,13 +242,24 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
 
         # スプリッターにフォルダツリーと画像表示エリアを追加
-        splitter.addWidget(self.folder_view)
-        splitter.addWidget(self.image_area_widget)
-        splitter.setSizes([250, 800])  # 初期サイズを設定
+        self.splitter.addWidget(self.folder_view)
+        self.splitter.addWidget(self.image_area_widget)
+        self.splitter.setSizes([250, 800])  # 初期サイズを設定
 
         # Load images on startup
         self.load_images()
-        
+
+    def toggle_folder_tree(self):
+        if self.folder_view.isVisible():
+            self.folder_view.hide()
+            self.splitter.setSizes([0, 800])
+            self.toggle_button.setText(">>")
+        else:
+            self.folder_view.show()
+            self.splitter.setSizes([250, 800])
+            self.toggle_button.setText("<<")
+  
+     
     def clear_thumbnails(self):
     #現在のサムネイルを全て削除する
         for i in reversed(range(self.grid_layout.count())):
