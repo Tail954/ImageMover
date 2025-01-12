@@ -6,7 +6,7 @@ from PIL import Image
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
     QRadioButton, QButtonGroup, QLabel, QFileDialog, QScrollArea, QGridLayout,
-    QToolTip, QDialog, QTextEdit
+    QToolTip, QDialog, QTextEdit, QMessageBox, QStatusBar  # Add QMessageBox here
 )
 from PyQt5.QtGui import QImage, QPixmap, QPainter
 from PyQt5.QtCore import Qt, QEvent
@@ -57,7 +57,7 @@ class ImageThumbnail(QLabel):
 
     def eventFilter(self, source, event):
         if event.type() == QEvent.Enter:
-            QToolTip.showText(event.globalPos(), os.path.basename(self.image_path))
+            QToolTip.showText(event.globalPos(), os.path.dirname(self.image_path))
         return super().eventFilter(source, event)
 
     def mousePressEvent(self, event):
@@ -65,27 +65,44 @@ class ImageThumbnail(QLabel):
             self.toggle_select()
         elif event.button() == Qt.RightButton:
             self.show_metadata_popup()
-        elif event.type() == QEvent.MouseButtonDblClick:
+    
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton:
             self.show_full_image()
 
     def toggle_select(self):
-        if self.main_window.copy_mode_active:
-            if not self.selected:
-                self.main_window.selection_count += 1
-                self.setText(str(self.main_window.selection_count).zfill(3))
+            if self.main_window.copy_mode_active:
+                if not self.selected:
+                    self.main_window.selection_count += 1
+                    self.overlay_number(str(self.main_window.selection_count).zfill(3))
+                    self.main_window.selected_image_paths.append(self.image_path)  # Add this line
+                else:
+                    current_text = self.overlay_label.text() if hasattr(self, 'overlay_label') else ''
+                    self.overlay_label.setText('') if hasattr(self, 'overlay_label') else None
+                    for thumb in self.main_window.thumbnails:
+                        thumb_text = thumb.overlay_label.text() if hasattr(thumb, 'overlay_label') else ''
+                        if thumb.selected and thumb_text and int(thumb_text) > int(current_text):
+                            thumb.overlay_number(str(int(thumb_text) - 1).zfill(3))
+                    self.main_window.selection_count -= 1
+                    self.main_window.selected_image_paths.remove(self.image_path)  # Add this line
+                self.selected = not self.selected
+                self.setStyleSheet("border: 3px solid orange;" if self.selected else "")
             else:
-                current_text = self.text()
-                self.setText('')
-                for thumb in self.main_window.thumbnails:
-                    thumb_text = thumb.text()
-                    if thumb.selected and thumb_text and int(thumb_text) > int(current_text):
-                        thumb.setText(str(int(thumb_text) - 1).zfill(3))
-                self.main_window.selection_count -= 1
-            self.selected = not self.selected
-            self.setStyleSheet("border: 3px solid orange;" if self.selected else "")
-        else:
-            self.selected = not self.selected
-            self.setStyleSheet("border: 3px solid orange;" if self.selected else "")
+                self.selected = not self.selected
+                if self.selected:
+                    self.main_window.selected_image_paths.append(self.image_path)  # Add this line
+                else:
+                    self.main_window.selected_image_paths.remove(self.image_path)  # Add this line
+                self.setStyleSheet("border: 3px solid orange;" if self.selected else "")
+
+    def overlay_number(self, number):
+        if not hasattr(self, 'overlay_label'):
+            self.overlay_label = QLabel(self)
+            self.overlay_label.setStyleSheet("color: white; background-color: rgba(0, 0, 0, 128);")
+            self.overlay_label.setAlignment(Qt.AlignCenter)
+            self.overlay_label.setGeometry(0, 0, self.width(), self.height())
+        self.overlay_label.setText(number)
+        self.overlay_label.show()
 
     def show_metadata_popup(self):
         popup = ImageMetadataPopup(self.metadata, self)
@@ -93,6 +110,7 @@ class ImageThumbnail(QLabel):
 
     def show_full_image(self):
         dialog = ImageDialog(self.image_path, self)
+        dialog.setStyleSheet("border: none;")
         dialog.exec_()
 
 
@@ -103,6 +121,7 @@ class MainWindow(QWidget):
         self.selection_count = 0
         self.copy_mode_active = False
         self.thumbnails = []
+        self.selected_image_paths = []  # Add this line to keep track of selected images
         self.init_ui()
         self.load_images()
 
@@ -110,6 +129,7 @@ class MainWindow(QWidget):
         layout = QVBoxLayout()
         search_layout = QHBoxLayout()
         self.search_box = QLineEdit()
+        self.search_box.installEventFilter(self)  # Add this line to install the event filter
         self.and_radio = QRadioButton("and")
         self.or_radio = QRadioButton("or")
         self.or_radio.setChecked(True)
@@ -142,18 +162,31 @@ class MainWindow(QWidget):
         button_layout.addWidget(self.move_button)
         button_layout.addWidget(self.copy_button)
         layout.addLayout(button_layout)
+        self.status_bar = QStatusBar()  # Add this line to create a status bar
+        layout.addWidget(self.status_bar)  # Add this line to add the status bar to the layout
+        
         self.setLayout(layout)
         self.setGeometry(100, 100, 1150, 800)
 
+    def eventFilter(self, source, event):
+        if source == self.search_box and event.type() == QEvent.KeyPress:
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                self.search_button.click()
+                return True
+        return super().eventFilter(source, event)
+    
     def load_images(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Source Folder")
         if not folder:
             sys.exit()
+        self.all_image_paths = []  # Add this line to define all_image_paths
         self.image_paths = []
         for root, _, files in os.walk(folder):
             for file in files:
                 if file.lower().endswith(('.png', '.jpeg', '.jpg', '.webp')):
-                    self.image_paths.append(os.path.join(root, file))
+                    full_path = os.path.join(root, file)
+                    self.image_paths.append(full_path)
+                    self.all_image_paths.append(full_path)  # Add this line to populate all_image_paths
         self.display_thumbnails()
 
     def display_thumbnails(self):
@@ -224,37 +257,85 @@ class MainWindow(QWidget):
             thumb.setStyleSheet("")
 
     def search_images(self):
+        self.status_bar.showMessage('検索中...')
+        self.search_box.setDisabled(True)
+        self.search_button.setDisabled(True)
+        
         query = self.search_box.text().strip()
         if not query:
+            self.image_paths = self.all_image_paths
             self.display_thumbnails()
+            self.restore_selection()  # Add this line to restore selection
+            self.status_bar.clearMessage()
+            self.search_box.setDisabled(False)
+            self.search_button.setDisabled(False)
             return
+        
         keywords = query.split(',')
         filtered_images = []
-        for image_path in self.image_paths:
+        for image_path in self.all_image_paths:
             metadata = self.extract_metadata(image_path)
-            match = all(keyword.lower() in metadata.lower() for keyword in keywords) if self.and_radio.isChecked() else \
-                    any(keyword.lower() in metadata.lower() for keyword in keywords)
+            metadata_str = json.dumps(metadata) if isinstance(metadata, dict) else metadata
+            if self.and_radio.isChecked():
+                match = all(keyword.lower() in metadata_str.lower() for keyword in keywords)
+            else:
+                match = any(keyword.lower() in metadata_str.lower() for keyword in keywords)
             if match:
                 filtered_images.append(image_path)
+        
         self.image_paths = filtered_images
         self.display_thumbnails()
+        self.restore_selection()  # Add this line to restore selection
+        
+        self.status_bar.clearMessage()
+        self.search_box.setDisabled(False)
+        self.search_button.setDisabled(False)
+
+    def restore_selection(self):
+        for thumb in self.thumbnails:
+            if thumb.image_path in self.selected_image_paths:
+                thumb.selected = True
+                thumb.setStyleSheet("border: 3px solid orange;")
+                if hasattr(thumb, 'overlay_label'):
+                    thumb.overlay_label.show()
 
     def move_images(self):
         destination = QFileDialog.getExistingDirectory(self, "Select Destination Folder")
         if not destination:
             return
+        
+        # 移動先に同名のファイルが存在するか確認
+        for thumb in self.thumbnails:
+            if thumb.selected:
+                dest_path = os.path.join(destination, os.path.basename(thumb.image_path))
+                if os.path.exists(dest_path):
+                    QMessageBox.warning(self, 'エラー', f'移動先に同名のファイルがあります: {os.path.basename(thumb.image_path)}')
+                    return
+        
+        # ファイルを移動
         for thumb in self.thumbnails:
             if thumb.selected:
                 os.rename(thumb.image_path, os.path.join(destination, os.path.basename(thumb.image_path)))
+        
         self.load_images()
 
     def copy_images(self):
         destination = QFileDialog.getExistingDirectory(self, "Select Destination Folder")
         if not destination:
             return
+        
+        # フォルダ内に番号のついたファイルがあるか確認
+        numbered_files = [f for f in os.listdir(destination) if any(char.isdigit() for char in f)]
+        if numbered_files:
+            reply = QMessageBox.question(self, '確認', 'フォルダ内に番号のついたファイルがあります。実行しますか？', 
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if reply == QMessageBox.No:
+                return
+        
         for thumb in self.thumbnails:
             if thumb.selected:
-                new_name = f"{thumb.text()}{os.path.splitext(thumb.image_path)[1]}"
+                ext = os.path.splitext(thumb.image_path)[1]
+                new_name = f"{thumb.overlay_label.text()}{ext}" if hasattr(thumb, 'overlay_label') else os.path.basename(thumb.image_path)
                 new_path = os.path.join(destination, new_name)
                 Image.open(thumb.image_path).save(new_path)
         self.load_images()
