@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QWidget, QGridLayout, QButtonGroup, QStatusBar, QMessageBox
 )
 from PyQt6.QtGui import QImage, QPixmap
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QProcess
 
 class ImageLoader(QThread):
     update_progress = pyqtSignal(int, int)  # 読み込み済み枚数と総枚数を送信
@@ -302,7 +302,7 @@ class MainWindow(QMainWindow):
             for image_path in selected_images:
                 new_path = os.path.join(folder, os.path.basename(image_path))
                 os.rename(image_path, new_path)
-            self.load_images()
+            self.restart_application()  # アプリケーションの再起動
 
     def copy_images(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Destination Folder")
@@ -375,6 +375,10 @@ class MainWindow(QMainWindow):
             metadata["others"] = comment
 
         return metadata
+    
+    def restart_application(self):
+        QApplication.quit()
+        status = QProcess.startDetached(sys.executable, sys.argv)
 
 
 
