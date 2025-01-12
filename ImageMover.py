@@ -176,10 +176,13 @@ class MainWindow(QMainWindow):
 
         # Copy mode and UnSelect buttons
         button_layout = QHBoxLayout()
+        self.select_all_button = QPushButton("Select All")
+        self.select_all_button.clicked.connect(self.select_all)
         self.unselect_button = QPushButton("deSelection")
         self.unselect_button.clicked.connect(self.unselect_all)
         self.copy_mode_button = QPushButton("Copy Mode")
         self.copy_mode_button.clicked.connect(self.toggle_copy_mode)
+        button_layout.addWidget(self.select_all_button)
         button_layout.addWidget(self.unselect_button)
         button_layout.addWidget(self.copy_mode_button)
         layout.addLayout(button_layout)
@@ -209,6 +212,25 @@ class MainWindow(QMainWindow):
 
         # Load images on startup
         self.load_images()
+        
+    def clear_thumbnails(self):
+    #現在のサムネイルを全て削除する
+        for i in reversed(range(self.grid_layout.count())):
+            widget = self.grid_layout.itemAt(i).widget()
+            if widget:
+                widget.setParent(None)
+
+    def select_all(self):
+        for i in range(self.grid_layout.count()):
+            thumbnail = self.grid_layout.itemAt(i).widget()
+            if not thumbnail.selected:
+                thumbnail.selected = True
+                if self.copy_mode:
+                    thumbnail.order = len(self.selection_order) + 1
+                    self.selection_order.append(thumbnail)
+                    thumbnail.order_label.setText(str(thumbnail.order))
+                    thumbnail.order_label.show()
+                thumbnail.setStyleSheet("border: 3px solid orange;")
 
     def unselect_all(self):
         for i in range(self.grid_layout.count()):
@@ -302,7 +324,9 @@ class MainWindow(QMainWindow):
             for image_path in selected_images:
                 new_path = os.path.join(folder, os.path.basename(image_path))
                 os.rename(image_path, new_path)
+            self.unselect_all()  # 選択状態を解除
             self.search_box.clear()  # search_boxの値をクリア
+            self.clear_thumbnails()  # 現在のサムネイルをクリア
             self.image_loader = ImageLoader(self.image_loader.folder)  # 前回選択したフォルダでImageLoaderを再初期化
             self.image_loader.update_progress.connect(self.update_image_count)
             self.image_loader.finished.connect(self.display_thumbnails)
