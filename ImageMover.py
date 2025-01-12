@@ -254,11 +254,21 @@ class MainWindow(QMainWindow):
             self.folder_view.hide()
             self.splitter.setSizes([0, 800])
             self.toggle_button.setText(">>")
+            self.update_thumbnail_columns(6)  # 列数を6に変更
         else:
             self.folder_view.show()
             self.splitter.setSizes([250, 800])
             self.toggle_button.setText("<<")
-  
+            self.update_thumbnail_columns(5)  # 列数を5に戻す  
+
+    def update_thumbnail_columns(self, columns):
+        for i in reversed(range(self.grid_layout.count())):
+            widget = self.grid_layout.itemAt(i).widget()
+            if widget:
+                self.grid_layout.removeWidget(widget)
+        for i, image_path in enumerate(self.images):
+            thumbnail = ImageThumbnail(image_path, self.grid_widget)
+            self.grid_layout.addWidget(thumbnail, i // columns, i % columns)
      
     def clear_thumbnails(self):
     #現在のサムネイルを全て削除する
