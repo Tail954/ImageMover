@@ -154,10 +154,15 @@ class MainWindow(QMainWindow):
         search_layout.addWidget(self.search_button)
         layout.addLayout(search_layout)
 
-        # Copy mode button
+        # Copy mode and UnSelect buttons
+        button_layout = QHBoxLayout()
+        self.unselect_button = QPushButton("deSelection")
+        self.unselect_button.clicked.connect(self.unselect_all)
         self.copy_mode_button = QPushButton("Copy Mode")
         self.copy_mode_button.clicked.connect(self.toggle_copy_mode)
-        layout.addWidget(self.copy_mode_button)
+        button_layout.addWidget(self.unselect_button)
+        button_layout.addWidget(self.copy_mode_button)
+        layout.addLayout(button_layout)
 
         # Thumbnail grid
         self.scroll_area = QScrollArea()
@@ -184,6 +189,15 @@ class MainWindow(QMainWindow):
 
         # Load images on startup
         self.load_images()
+
+    def unselect_all(self):
+        for i in range(self.grid_layout.count()):
+            thumbnail = self.grid_layout.itemAt(i).widget()
+            thumbnail.selected = False
+            thumbnail.setStyleSheet("")
+            thumbnail.order = -1  # クリック順序をリセット
+            thumbnail.order_label.hide()  # 番号ラベルを非表示にする
+        self.selection_order = []
 
     def load_images(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
