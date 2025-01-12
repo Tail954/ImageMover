@@ -4,7 +4,7 @@ import shutil
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton,
     QLineEdit, QFileDialog, QLabel, QScrollArea, QWidget, QGridLayout,
-    QCheckBox, QTextEdit, QDialog, QRadioButton, QButtonGroup
+    QCheckBox, QTextEdit, QDialog
 )
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import Qt, QTimer, QEvent
@@ -43,19 +43,8 @@ class ImageMoverApp(QMainWindow):
         self.search_button = QPushButton('Search')
         self.search_button.clicked.connect(self.searchImages)
         self.search_bar.installEventFilter(self)
-
-        # Add radio buttons for AND/OR search
-        self.and_radio = QRadioButton("AND")
-        self.or_radio = QRadioButton("OR")
-        self.or_radio.setChecked(True)
-        self.search_mode_group = QButtonGroup()
-        self.search_mode_group.addButton(self.and_radio)
-        self.search_mode_group.addButton(self.or_radio)
-
         self.search_layout.addWidget(self.search_bar)
         self.search_layout.addWidget(self.search_button)
-        self.search_layout.addWidget(self.and_radio)
-        self.search_layout.addWidget(self.or_radio)
         self.main_layout.addLayout(self.search_layout)
 
     def initScrollArea(self):
@@ -214,19 +203,9 @@ class ImageMoverApp(QMainWindow):
 
     def searchImages(self):
         query = self.search_bar.text().lower()
-        search_terms = [term.strip() for term in query.split(',')]
-        and_search = self.and_radio.isChecked()
-
         for i, data in enumerate(self.image_data):
             metadata_str = data['metadata'] if isinstance(data['metadata'], str) else json.dumps(data['metadata'])
-            metadata_str = metadata_str.lower()
-
-            if and_search:
-                match = all(term in metadata_str for term in search_terms)
-            else:
-                match = any(term in metadata_str for term in search_terms)
-
-            if match:
+            if query in metadata_str.lower():
                 self.image_widgets[i]['label'].show()
                 self.image_widgets[i]['checkbox'].show()
             else:
