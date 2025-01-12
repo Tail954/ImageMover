@@ -35,12 +35,16 @@ class MetadataDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Metadata")
         self.text_edit = QTextEdit(self)
+        # メタデータの最初の '{' と最後の '}' を削除
+        if metadata.startswith("{") and metadata.endswith("}"):
+            metadata = metadata[1:-1].strip()
         self.text_edit.setPlainText(metadata)
         self.text_edit.setReadOnly(True)
         layout = QVBoxLayout()
         layout.addWidget(self.text_edit)
         self.setLayout(layout)
         self.setMinimumSize(400, 300)
+
 
 class ImageDialog(QDialog):
     def __init__(self, image_path, parent=None):
