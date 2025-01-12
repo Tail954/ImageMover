@@ -34,16 +34,32 @@ class MetadataDialog(QDialog):
     def __init__(self, metadata, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Metadata")
-        self.text_edit = QTextEdit(self)
-        # メタデータの最初の '{' と最後の '}' を削除
-        if metadata.startswith("{") and metadata.endswith("}"):
-            metadata = metadata[1:-1].strip()
-        self.text_edit.setPlainText(metadata)
-        self.text_edit.setReadOnly(True)
+        
+        # メタデータを辞書形式に変換
+        metadata_dict = json.loads(metadata)
+
+        self.positive_edit = QTextEdit(self)
+        self.negative_edit = QTextEdit(self)
+        self.others_edit = QTextEdit(self)
+
+        self.positive_edit.setPlainText(metadata_dict.get("positive", "No positive metadata"))
+        self.negative_edit.setPlainText(metadata_dict.get("negative", "No negative metadata"))
+        self.others_edit.setPlainText(metadata_dict.get("others", "No other metadata"))
+
+        self.positive_edit.setReadOnly(True)
+        self.negative_edit.setReadOnly(True)
+        self.others_edit.setReadOnly(True)
+
         layout = QVBoxLayout()
-        layout.addWidget(self.text_edit)
+        layout.addWidget(QLabel("Positive"))
+        layout.addWidget(self.positive_edit)
+        layout.addWidget(QLabel("Negative"))
+        layout.addWidget(self.negative_edit)
+        layout.addWidget(QLabel("Other"))
+        layout.addWidget(self.others_edit)
         self.setLayout(layout)
-        self.setMinimumSize(400, 300)
+        self.setMinimumSize(400, 600)
+
 
 
 class ImageDialog(QDialog):
@@ -302,15 +318,18 @@ class MainWindow(QMainWindow):
 
     def extract_metadata(self, image_path):
         try:
+            metadata = {}
+
             if image_path.lower().endswith('.png'):
                 image = QImage(image_path)
-                metadata = image.text()
-                return metadata if metadata else "No Metadata"
+                raw_metadata = image.text()
+                if raw_metadata:
+                    metadata.update(self.parse_metadata(raw_metadata))
+                else:
+                    metadata["Comment"] = "No Metadata found in PNG text chunks."
             else:
                 img = Image.open(image_path)
                 exif_data = img.info.get('exif')
-
-                metadata = {}
 
                 if exif_data:
                     exif_dict = piexif.load(exif_data)
@@ -322,7 +341,7 @@ class MainWindow(QMainWindow):
                     else:
                         metadata["UserComment"] = "No UserComment found in EXIF data."
 
-                return json.dumps(metadata, indent=4)
+            return json.dumps(metadata, indent=4)
         except Exception as e:
             print(f"Error extracting metadata: {e}")
             return "Error extracting metadata"
@@ -343,13 +362,21 @@ class MainWindow(QMainWindow):
         try:
             if comment.startswith("UNICODE"):
                 comment = comment[7:]
-            metadata["positive"] = comment.split("Negative prompt: ")[0]
+            
+            # "parameters:" を取り除く処理
+            positive_part = comment.split("Negative prompt: ")[0]
+            if "parameters: " in positive_part:
+                positive_part = positive_part.replace("parameters: ", "").strip()
+
+            metadata["positive"] = positive_part
             metadata["negative"] = comment.split("Negative prompt: ")[1].split("Steps: ")[0]
             metadata["others"] = "Steps: " + comment.split("Steps: ")[1]
         except IndexError:
             metadata["others"] = comment
 
         return metadata
+
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
