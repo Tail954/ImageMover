@@ -3,6 +3,7 @@ import os
 import json
 import shutil
 import piexif
+from send2trash import send2trash
 from PIL import Image
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QFileDialog, QLabel, QPushButton,
@@ -310,6 +311,21 @@ class MainWindow(QMainWindow):
             thumbnail.order_label.hide()  # 番号ラベルを非表示にする
         self.selection_order = []
 
+    def check_and_remove_empty_folders(self, folder):
+        for root, dirs, files in os.walk(folder):
+            for dir in dirs:
+                dir_path = os.path.join(root, dir)
+                if not os.listdir(dir_path):  # 空フォルダの場合
+                    reply = QMessageBox.question(self, '空のフォルダが見つかりました',
+                                                f'フォルダ "{dir_path}" は空です。削除しますか?',
+                                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+                    if reply == QMessageBox.StandardButton.Yes:
+                        normalized_path = os.path.normpath(dir_path.replace('\\\\?\\', ''))
+                        try:
+                            send2trash(normalized_path)  # ゴミ箱に移動
+                        except Exception as e:
+                            print(f"フォルダの削除中にエラーが発生しました: {e}")
+
     def load_images(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
         if folder:
@@ -326,6 +342,9 @@ class MainWindow(QMainWindow):
             self.folder_view.setCurrentIndex(folder_index)
             self.folder_view.expand(folder_index)
 
+            # サブフォルダの空フォルダをチェック
+            self.check_and_remove_empty_folders(folder)
+
             self.status_bar.showMessage("Loading images...")
             self.clear_thumbnails()
             self.image_loader = ImageLoader(folder)
@@ -335,21 +354,6 @@ class MainWindow(QMainWindow):
 
     def update_image_count(self, loaded, total):
         self.status_bar.showMessage(f"Loading images... {loaded}/{total} images loaded")
-
-    def display_thumbnails(self):
-        self.images = self.image_loader.images
-        
-        # 画像が0枚の場合、再読み込みボタンを表示
-        if len(self.images) == 0:
-            self.status_bar.showMessage("No images found. Please try again.")
-            self.show_reload_button()
-            return
-
-        for i, image_path in enumerate(self.images):
-            thumbnail = ImageThumbnail(image_path, self.grid_widget)
-            self.grid_layout.addWidget(thumbnail, i // 5, i % 5)
-
-        self.status_bar.showMessage(f"Total images: {len(self.images)}")
 
     def display_thumbnails(self):
         self.images = self.image_loader.images
@@ -447,6 +451,7 @@ class MainWindow(QMainWindow):
             self.image_loader.update_progress.connect(self.update_image_count)
             self.image_loader.finished.connect(self.display_thumbnails)
             self.image_loader.start()
+            self.check_and_remove_empty_folders(self.image_loader.folder)  # サブフォルダの空フォルダをチェック
 
     def copy_images(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Destination Folder")
