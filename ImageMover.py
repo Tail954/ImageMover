@@ -302,7 +302,11 @@ class MainWindow(QMainWindow):
             for image_path in selected_images:
                 new_path = os.path.join(folder, os.path.basename(image_path))
                 os.rename(image_path, new_path)
-            self.restart_application()  # アプリケーションの再起動
+            self.search_box.clear()  # search_boxの値をクリア
+            self.image_loader = ImageLoader(self.image_loader.folder)  # 前回選択したフォルダでImageLoaderを再初期化
+            self.image_loader.update_progress.connect(self.update_image_count)
+            self.image_loader.finished.connect(self.display_thumbnails)
+            self.image_loader.start()
 
     def copy_images(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Destination Folder")
