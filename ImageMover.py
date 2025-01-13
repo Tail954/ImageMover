@@ -441,6 +441,9 @@ class MainWindow(QMainWindow):
 
     # 最後に選択したフォルダを保存する
     def save_last_values(self):
+        if not self.folder_view.isVisible():
+            self.thumbnail_columns = self.thumbnail_columns - 1
+
         with open("last_value.json", "w") as file:
             json.dump({"folder": self.current_folder, "thumbnail_columns": self.thumbnail_columns}, file)
 
