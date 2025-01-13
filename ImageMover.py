@@ -253,6 +253,8 @@ class MainWindow(QMainWindow):
         self.thumbnail_columns = 5  # サムネイルの列数を保持する変数を追加
         self.thumbnail_cache = ThumbnailCache()
 
+        # 最後に選択したフォルダをロード
+        self.load_last_values()
         self.initUI()
 
     def initUI(self):
@@ -429,6 +431,23 @@ class MainWindow(QMainWindow):
             if widget:
                 widget.setParent(None)
 
+    # 最後に選択したフォルダをロードする
+    def load_last_values(self):
+        if os.path.exists("last_value.json"):
+            with open("last_value.json", "r") as file:
+                data = json.load(file)
+                self.current_folder = data.get("folder", "")
+                self.thumbnail_columns = data.get("thumbnail_columns", 5)
+
+    # 最後に選択したフォルダを保存する
+    def save_last_values(self):
+        with open("last_value.json", "w") as file:
+            json.dump({"folder": self.current_folder, "thumbnail_columns": self.thumbnail_columns}, file)
+
+    def closeEvent(self, event):
+        self.save_last_values()
+        super().closeEvent(event)
+
     # フォルダが選択されたときに呼び出されるスロット
     def on_folder_selected(self, index):
         folder_path = self.folder_model.filePath(index)
@@ -517,7 +536,7 @@ class MainWindow(QMainWindow):
                             print(f"フォルダの削除中にエラーが発生しました: {e}")
 
     def load_images(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Image Folder")
+        folder = QFileDialog.getExistingDirectory(self, "Select Image Folder",self.current_folder)
         if folder:
             self.current_folder = folder  # 選択されたフォルダパスを保存
             # 選択したフォルダの親フォルダのパスを取得
