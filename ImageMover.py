@@ -212,7 +212,7 @@ class MainWindow(QMainWindow):
         button_layout = QHBoxLayout()
         self.select_all_button = QPushButton("Select All")
         self.select_all_button.clicked.connect(self.select_all)
-        self.unselect_button = QPushButton("DeSelect All")
+        self.unselect_button = QPushButton("UnSelect All")
         self.unselect_button.clicked.connect(self.unselect_all)
         self.copy_mode_button = QPushButton("Copy Mode")
         self.copy_mode_button.clicked.connect(self.toggle_copy_mode)
