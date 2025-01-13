@@ -456,10 +456,16 @@ class MainWindow(QMainWindow):
         folder_path = self.folder_model.filePath(index)
         self.load_images_from_folder(folder_path)
 
+    def set_ui_enabled(self, enabled):
+        """UI全体を有効化/無効化する"""
+        for widget in self.findChildren(QWidget):
+            widget.setEnabled(enabled)
+
     # フォルダ内の画像をロードする
     def load_images_from_folder(self, folder):
         self.status_bar.showMessage("Loading images...")
         self.clear_thumbnails()
+        self.set_ui_enabled(False)  # UIを無効化
         
         if hasattr(self, 'image_loader'):
             self.image_loader.stop()
@@ -484,6 +490,8 @@ class MainWindow(QMainWindow):
     def finalize_loading(self, images):
         self.images = images
         self.status_bar.showMessage(f"Total images: {len(self.images)}")
+        self.set_ui_enabled(True)  # UIを有効化
+        
         # 画像が0枚の場合、再読み込みボタンを表示
         if len(self.images) == 0:
             self.status_bar.showMessage("No images found. Please try again.")
