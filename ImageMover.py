@@ -430,6 +430,7 @@ class MainWindow(QMainWindow):
         self.search_box.setEnabled(True)  # テキストボックスを再度有効化
 
     def clear_search(self):
+        self.search_results = []  # 検索結果を初期化
         for i in reversed(range(self.grid_layout.count())):
             self.grid_layout.itemAt(i).widget().setParent(None)
 
