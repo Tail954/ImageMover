@@ -12,31 +12,115 @@ from PyQt6.QtWidgets import (
     QTreeView, QSplitter
 )
 from PyQt6.QtGui import QImage, QPixmap, QFileSystemModel
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QProcess, QDir
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QProcess, QDir, QSize
+from pathlib import Path
+import concurrent.futures
+import queue
+import threading
+from functools import lru_cache
+import mimetypes
+
+class ThumbnailCache:
+    #サムネイルのキャッシュを管理するクラス
+    def __init__(self, max_size=1000):
+        self.cache = {}
+        self.max_size = max_size
+        self.lock = threading.Lock()
+
+    @lru_cache(maxsize=1000)
+    def get_thumbnail(self, image_path, size):
+        #キャッシュからサムネイルを取得または生成
+        with self.lock:
+            if image_path in self.cache:
+                return self.cache[image_path]
+            
+            try:
+                image = QImage(image_path)
+                pixmap = QPixmap.fromImage(image).scaled(
+                    size, size, Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                if len(self.cache) >= self.max_size:
+                    self.cache.pop(next(iter(self.cache)))
+                self.cache[image_path] = pixmap
+                return pixmap
+            except Exception as e:
+                print(f"Error creating thumbnail for {image_path}: {e}")
+                return None
 
 class ImageLoader(QThread):
-    update_progress = pyqtSignal(int, int)  # 読み込み済み枚数と総枚数を送信
+    #非同期で画像をロードするスレッド
+    update_progress = pyqtSignal(int, int)
+    update_thumbnail = pyqtSignal(str, int)
+    finished_loading = pyqtSignal(list)
 
-    def __init__(self, folder):
+    def __init__(self, folder, thumbnail_size=200):
         super().__init__()
         self.folder = folder
+        self.thumbnail_size = thumbnail_size
         self.images = []
         self.total_files = 0
+        self._is_running = True
+        self.thumbnail_cache = ThumbnailCache()
+        self.valid_extensions = {'.png', '.jpeg', '.jpg', '.webp'}
+
+    def stop(self):
+        #スレッドを停止
+        self._is_running = False
+
+    def is_valid_image(self, file_path):
+        #ファイルが有効な画像かどうかチェック
+        return Path(file_path).suffix.lower() in self.valid_extensions
 
     def run(self):
-        for root, _, files in os.walk(self.folder):
-            self.total_files += len([file for file in files if file.lower().endswith(('.png', '.jpeg', '.jpg', '.webp'))])
-        for root, _, files in os.walk(self.folder):
-            for file in files:
-                if file.lower().endswith(('.png', '.jpeg', '.jpg', '.webp')): 
-                    self.images.append(os.path.join(root, file))
-                    self.update_progress.emit(len(self.images), self.total_files)
+        #画像ロードの実行
+        try:
+            self.total_files = sum(
+                1 for f in Path(self.folder).rglob('*')
+                if self.is_valid_image(f)
+            )
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                future_to_path = {
+                    executor.submit(self.process_image, str(f)): str(f)
+                    for f in Path(self.folder).rglob('*')
+                    if self.is_valid_image(f)
+                }
+
+                for i, future in enumerate(concurrent.futures.as_completed(future_to_path)):
+                    if not self._is_running:
+                        break
+                    
+                    path = future_to_path[future]
+                    try:
+                        if future.result():
+                            self.images.append(path)
+                            self.update_thumbnail.emit(path, i)
+                    except Exception as e:
+                        print(f"Error processing {path}: {e}")
+
+                    self.update_progress.emit(i + 1, self.total_files)
+
+            if self._is_running:
+                self.finished_loading.emit(self.images)
+
+        except Exception as e:
+            print(f"Error in image loader: {e}")
+
+    def process_image(self, image_path):
+        #個々の画像を処理
+        try:
+            self.thumbnail_cache.get_thumbnail(image_path, self.thumbnail_size)
+            return True
+        except Exception as e:
+            print(f"Error processing image {image_path}: {e}")
+            return False
 
 class MetadataDialog(QDialog):
     def __init__(self, metadata, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Metadata")
-        
+
         # メタデータを辞書形式に変換
         metadata_dict = json.loads(metadata)
 
@@ -62,8 +146,6 @@ class MetadataDialog(QDialog):
         self.setLayout(layout)
         self.setMinimumSize(400, 600)
 
-
-
 class ImageDialog(QDialog):
     def __init__(self, image_path, parent=None):
         super().__init__(parent)
@@ -78,18 +160,23 @@ class ImageDialog(QDialog):
 
     def resizeEvent(self, event):
         new_pixmap = self.pixmap.scaled(
-            self.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.size(), Qt.AspectRatioMode.KeepAspectRatio, 
+            Qt.TransformationMode.SmoothTransformation)
         self.image_label.setPixmap(new_pixmap)
 
 class ImageThumbnail(QLabel):
-    def __init__(self, image_path, parent=None):
+    def __init__(self, image_path, thumbnail_cache, parent=None):
         super().__init__(parent)
         self.image_path = image_path
+        self.thumbnail_cache = thumbnail_cache
         self.selected = False
-        self.order = -1  # クリック順序を保持するプロパティ
+        self.order = -1 # クリック順序を保持するプロパティ
         self.setFixedSize(200, 200)
         self.setScaledContents(False)  # アスペクト比を維持するためにFalseに設定
-        self.setPixmap(QPixmap(image_path).scaled(200, 200, Qt.AspectRatioMode.KeepAspectRatio))
+        
+        QThread.currentThread().priority()
+        self.load_thumbnail()
+        
         self.setToolTip(os.path.dirname(image_path))
 
         # 番号を表示するためのラベルを追加
@@ -98,6 +185,17 @@ class ImageThumbnail(QLabel):
         self.order_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.order_label.setGeometry(0, 0, 30, 30)
         self.order_label.hide()
+
+    def load_thumbnail(self):
+        try:
+            pixmap = self.thumbnail_cache.get_thumbnail(self.image_path, 200)
+            if pixmap:
+                self.setPixmap(pixmap)
+            else:
+                self.setText("Error")
+        except Exception as e:
+            print(f"Error loading thumbnail: {e}")
+            self.setText("Error")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -150,9 +248,10 @@ class MainWindow(QMainWindow):
         self.images = []
         self.copy_mode = False
         self.selection_order = []  # クリック順序を保持するリスト
-        self.current_folder = ""  # 現在のフォルダパスを保持
-        self.search_results = []  # 検索結果を保持するリストを追加
+        self.current_folder = ""   # 現在のフォルダパスを保持
+        self.search_results = []   # 検索結果を保持するリストを追加
         self.thumbnail_columns = 5  # サムネイルの列数を保持する変数を追加
+        self.thumbnail_cache = ThumbnailCache()
 
         self.initUI()
 
@@ -208,7 +307,7 @@ class MainWindow(QMainWindow):
         search_layout.addWidget(self.search_button)
         image_layout.addLayout(search_layout)
 
-        # Copy mode and UnSelect buttons
+        # UnSelect, Select All, Copy mode, buttons
         button_layout = QHBoxLayout()
         self.select_all_button = QPushButton("Select All")
         self.select_all_button.clicked.connect(self.select_all)
@@ -264,15 +363,18 @@ class MainWindow(QMainWindow):
             self.splitter.setSizes([250, 800])
             self.toggle_button.setText("<<")
             self.thumbnail_columns = 5  # 列数を5に戻す
-            self.update_thumbnail_columns(self.thumbnail_columns)  
-        
+            self.update_thumbnail_columns(self.thumbnail_columns)
+                
         # 検索結果がある場合、それを再表示
         if self.search_results:
             self.clear_thumbnails()
+            #現在のサムネイルを全て削除する
             for i, image_path in enumerate(self.search_results):
-                thumbnail = ImageThumbnail(image_path, self.grid_widget)
-                self.grid_layout.addWidget(thumbnail, i // self.thumbnail_columns, i % self.thumbnail_columns)
-
+                thumbnail = ImageThumbnail(image_path, self.thumbnail_cache, self.grid_widget)
+                self.grid_layout.addWidget(thumbnail, i // self.thumbnail_columns, 
+                                         i % self.thumbnail_columns)
+                
+    # サムネイルの列数を更新する
     def update_thumbnail_columns(self, columns):
         self.thumbnail_columns = columns  # 列数を更新
         for i in reversed(range(self.grid_layout.count())):
@@ -280,27 +382,65 @@ class MainWindow(QMainWindow):
             if widget:
                 self.grid_layout.removeWidget(widget)
         for i, image_path in enumerate(self.images):
-            thumbnail = ImageThumbnail(image_path, self.grid_widget)
-            self.grid_layout.addWidget(thumbnail, i // self.thumbnail_columns, i % self.thumbnail_columns)
+            thumbnail = ImageThumbnail(image_path, self.thumbnail_cache, self.grid_widget)
+            self.grid_layout.addWidget(thumbnail, i // self.thumbnail_columns, 
+                                     i % self.thumbnail_columns)
      
+     # サムネイルを全て削除する
     def clear_thumbnails(self):
-    #現在のサムネイルを全て削除する
         for i in reversed(range(self.grid_layout.count())):
             widget = self.grid_layout.itemAt(i).widget()
             if widget:
                 widget.setParent(None)
 
+    # フォルダが選択されたときに呼び出されるスロット
     def on_folder_selected(self, index):
         folder_path = self.folder_model.filePath(index)
         self.load_images_from_folder(folder_path)
 
+    # フォルダ内の画像をロードする
     def load_images_from_folder(self, folder):
         self.status_bar.showMessage("Loading images...")
-        self.clear_thumbnails()  # サムネイルをクリア
+        self.clear_thumbnails()
+        
+        if hasattr(self, 'image_loader'):
+            self.image_loader.stop()
+            self.image_loader.wait()
+        
         self.image_loader = ImageLoader(folder)
         self.image_loader.update_progress.connect(self.update_image_count)
-        self.image_loader.finished.connect(self.display_thumbnails)
+        self.image_loader.update_thumbnail.connect(self.add_thumbnail)
+        self.image_loader.finished_loading.connect(self.finalize_loading)
         self.image_loader.start()
+
+    def update_image_count(self, loaded, total):
+        self.status_bar.showMessage(f"Loading images... {loaded}/{total} images loaded")
+
+    # サムネイルを追加する
+    def add_thumbnail(self, image_path, index):
+        thumbnail = ImageThumbnail(image_path, self.thumbnail_cache, self.grid_widget)
+        self.grid_layout.addWidget(thumbnail, index // self.thumbnail_columns, 
+                                 index % self.thumbnail_columns)
+
+    # 画像のロードが完了したときに呼び出されるスロット
+    def finalize_loading(self, images):
+        self.images = images
+        self.status_bar.showMessage(f"Total images: {len(self.images)}")
+        # 画像が0枚の場合、再読み込みボタンを表示
+        if len(self.images) == 0:
+            self.status_bar.showMessage("No images found. Please try again.")
+            self.show_reload_button()
+            return
+
+    def show_reload_button(self):
+        reload_button = QPushButton("Reload")
+        reload_button.setStyleSheet("background-color: lightgray; font-size: 16px;")
+        reload_button.clicked.connect(self.load_images)
+        
+        # 中央にボタンを配置
+        for i in reversed(range(self.grid_layout.count())):
+            self.grid_layout.itemAt(i).widget().setParent(None)
+        self.grid_layout.addWidget(reload_button, 0, 0, Qt.AlignmentFlag.AlignCenter)
 
     def select_all(self):
         for i in range(self.grid_layout.count()):
@@ -329,8 +469,10 @@ class MainWindow(QMainWindow):
                 dir_path = os.path.join(root, dir)
                 if not os.listdir(dir_path):  # 空フォルダの場合
                     reply = QMessageBox.question(self, '空のフォルダが見つかりました',
-                                                f'フォルダ "{dir_path}" は空です。削除しますか?',
-                                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+                                             f'フォルダ "{dir_path}" は空です。削除しますか?',
+                                             QMessageBox.StandardButton.Yes | 
+                                             QMessageBox.StandardButton.No, 
+                                             QMessageBox.StandardButton.No)
                     if reply == QMessageBox.StandardButton.Yes:
                         normalized_path = os.path.normpath(dir_path.replace('\\\\?\\', ''))
                         try:
@@ -357,40 +499,7 @@ class MainWindow(QMainWindow):
             # サブフォルダの空フォルダをチェック
             self.check_and_remove_empty_folders(folder)
 
-            self.status_bar.showMessage("Loading images...")
-            self.clear_thumbnails()
-            self.image_loader = ImageLoader(folder)
-            self.image_loader.update_progress.connect(self.update_image_count)
-            self.image_loader.finished.connect(self.display_thumbnails)
-            self.image_loader.start()
-
-    def update_image_count(self, loaded, total):
-        self.status_bar.showMessage(f"Loading images... {loaded}/{total} images loaded")
-
-    def display_thumbnails(self):
-        self.images = self.image_loader.images
-        
-        # 画像が0枚の場合、再読み込みボタンを表示
-        if len(self.images) == 0:
-            self.status_bar.showMessage("No images found. Please try again.")
-            self.show_reload_button()
-            return
-
-        for i, image_path in enumerate(self.images):
-            thumbnail = ImageThumbnail(image_path, self.grid_widget)
-            self.grid_layout.addWidget(thumbnail, i // self.thumbnail_columns, i % self.thumbnail_columns)
-
-        self.status_bar.showMessage(f"Total images: {len(self.images)}")
-
-    def show_reload_button(self):
-        reload_button = QPushButton("Reload")
-        reload_button.setStyleSheet("background-color: lightgray; font-size: 16px;")
-        reload_button.clicked.connect(self.load_images)
-        
-        # 中央にボタンを配置
-        for i in reversed(range(self.grid_layout.count())):
-            self.grid_layout.itemAt(i).widget().setParent(None)
-        self.grid_layout.addWidget(reload_button, 0, 0, Qt.AlignmentFlag.AlignCenter)
+            self.load_images_from_folder(folder)
 
     def search_images(self):
         query = self.search_box.text()
@@ -414,29 +523,25 @@ class MainWindow(QMainWindow):
                 if any(term.lower() in metadata.lower() for term in terms):
                     matches.append(image_path)
 
-            self.search_results = matches  # 検索結果を保存
-
-            self.clear_thumbnails()  # 既存のサムネイルをクリア
-
-        for i in reversed(range(self.grid_layout.count())):
-            self.grid_layout.itemAt(i).widget().setParent(None)
+        self.search_results = matches  # 検索結果を保存
+        self.clear_thumbnails()  # 既存のサムネイルをクリア
 
         for i, image_path in enumerate(matches):
-            thumbnail = ImageThumbnail(image_path, self.grid_widget)
-            self.grid_layout.addWidget(thumbnail, i // 5, i % 5)
+            thumbnail = ImageThumbnail(image_path, self.thumbnail_cache, self.grid_widget)
+            self.grid_layout.addWidget(thumbnail, i // self.thumbnail_columns, 
+                                     i % self.thumbnail_columns)
 
         self.status_bar.clearMessage()
         self.search_button.setEnabled(True)
         self.search_box.setEnabled(True)  # テキストボックスを再度有効化
 
     def clear_search(self):
-        self.search_results = []  # 検索結果を初期化
-        for i in reversed(range(self.grid_layout.count())):
-            self.grid_layout.itemAt(i).widget().setParent(None)
-
+        self.search_results = []
+        self.clear_thumbnails()
         for i, image_path in enumerate(self.images):
-            thumbnail = ImageThumbnail(image_path, self.grid_widget)
-            self.grid_layout.addWidget(thumbnail, i // 5, i % 5)
+            thumbnail = ImageThumbnail(image_path, self.thumbnail_cache, self.grid_widget)
+            self.grid_layout.addWidget(thumbnail, i // self.thumbnail_columns, 
+                                     i % self.thumbnail_columns)
 
     def toggle_copy_mode(self):
         self.copy_mode = not self.copy_mode
@@ -457,7 +562,9 @@ class MainWindow(QMainWindow):
     def move_images(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Destination Folder")
         if folder:
-            selected_images = [self.grid_layout.itemAt(i).widget().image_path for i in range(self.grid_layout.count()) if self.grid_layout.itemAt(i).widget().selected]
+            selected_images = [self.grid_layout.itemAt(i).widget().image_path 
+                             for i in range(self.grid_layout.count()) 
+                             if self.grid_layout.itemAt(i).widget().selected]
             for image_path in selected_images:
                 new_path = os.path.join(folder, os.path.basename(image_path))
                 os.rename(image_path, new_path)
@@ -466,7 +573,8 @@ class MainWindow(QMainWindow):
             self.clear_thumbnails()  # 現在のサムネイルをクリア
             self.image_loader = ImageLoader(self.image_loader.folder)  # 前回選択したフォルダでImageLoaderを再初期化
             self.image_loader.update_progress.connect(self.update_image_count)
-            self.image_loader.finished.connect(self.display_thumbnails)
+            self.image_loader.update_thumbnail.connect(self.add_thumbnail)
+            self.image_loader.finished_loading.connect(self.finalize_loading)
             self.image_loader.start()
             self.check_and_remove_empty_folders(self.image_loader.folder)  # サブフォルダの空フォルダをチェック
 
@@ -477,8 +585,11 @@ class MainWindow(QMainWindow):
                 image_path = thumbnail.image_path
                 new_path = os.path.join(folder, f"{i:03}_{os.path.basename(image_path)}")
                 if os.path.exists(new_path):
-                    overwrite = QMessageBox.question(self, "Overwrite", f"{new_path} already exists. Overwrite?", QMessageBox.Yes | QMessageBox.No)
-                    if overwrite == QMessageBox.No:
+                    overwrite = QMessageBox.question(self, "Overwrite", 
+                                                   f"{new_path} already exists. Overwrite?",
+                                                   QMessageBox.StandardButton.Yes | 
+                                                   QMessageBox.StandardButton.No)
+                    if overwrite == QMessageBox.StandardButton.No:
                         continue
                 shutil.copy2(image_path, new_path)
 
@@ -528,7 +639,7 @@ class MainWindow(QMainWindow):
         try:
             if comment.startswith("UNICODE"):
                 comment = comment[7:]
-            
+                
             # "parameters:" を取り除く処理
             positive_part = comment.split("Negative prompt: ")[0]
             if "parameters: " in positive_part:
@@ -545,8 +656,6 @@ class MainWindow(QMainWindow):
     def restart_application(self):
         QApplication.quit()
         status = QProcess.startDetached(sys.executable, sys.argv)
-
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
