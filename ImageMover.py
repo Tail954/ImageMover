@@ -151,6 +151,8 @@ class MainWindow(QMainWindow):
         self.copy_mode = False
         self.selection_order = []  # クリック順序を保持するリスト
         self.current_folder = ""  # 現在のフォルダパスを保持
+        self.search_results = []  # 検索結果を保持するリストを追加
+        self.thumbnail_columns = 5  # サムネイルの列数を保持する変数を追加
 
         self.initUI()
 
@@ -255,21 +257,31 @@ class MainWindow(QMainWindow):
             self.folder_view.hide()
             self.splitter.setSizes([0, 800])
             self.toggle_button.setText(">>")
-            self.update_thumbnail_columns(6)  # 列数を6に変更
+            self.thumbnail_columns = 6  # 列数を6に変更
+            self.update_thumbnail_columns(self.thumbnail_columns)
         else:
             self.folder_view.show()
             self.splitter.setSizes([250, 800])
             self.toggle_button.setText("<<")
-            self.update_thumbnail_columns(5)  # 列数を5に戻す  
+            self.thumbnail_columns = 5  # 列数を5に戻す
+            self.update_thumbnail_columns(self.thumbnail_columns)  
+        
+        # 検索結果がある場合、それを再表示
+        if self.search_results:
+            self.clear_thumbnails()
+            for i, image_path in enumerate(self.search_results):
+                thumbnail = ImageThumbnail(image_path, self.grid_widget)
+                self.grid_layout.addWidget(thumbnail, i // self.thumbnail_columns, i % self.thumbnail_columns)
 
     def update_thumbnail_columns(self, columns):
+        self.thumbnail_columns = columns  # 列数を更新
         for i in reversed(range(self.grid_layout.count())):
             widget = self.grid_layout.itemAt(i).widget()
             if widget:
                 self.grid_layout.removeWidget(widget)
         for i, image_path in enumerate(self.images):
             thumbnail = ImageThumbnail(image_path, self.grid_widget)
-            self.grid_layout.addWidget(thumbnail, i // columns, i % columns)
+            self.grid_layout.addWidget(thumbnail, i // self.thumbnail_columns, i % self.thumbnail_columns)
      
     def clear_thumbnails(self):
     #現在のサムネイルを全て削除する
@@ -366,7 +378,7 @@ class MainWindow(QMainWindow):
 
         for i, image_path in enumerate(self.images):
             thumbnail = ImageThumbnail(image_path, self.grid_widget)
-            self.grid_layout.addWidget(thumbnail, i // 5, i % 5)
+            self.grid_layout.addWidget(thumbnail, i // self.thumbnail_columns, i % self.thumbnail_columns)
 
         self.status_bar.showMessage(f"Total images: {len(self.images)}")
 
@@ -401,6 +413,10 @@ class MainWindow(QMainWindow):
             else:
                 if any(term.lower() in metadata.lower() for term in terms):
                     matches.append(image_path)
+
+            self.search_results = matches  # 検索結果を保存
+
+            self.clear_thumbnails()  # 既存のサムネイルをクリア
 
         for i in reversed(range(self.grid_layout.count())):
             self.grid_layout.itemAt(i).widget().setParent(None)
