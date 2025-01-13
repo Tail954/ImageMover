@@ -289,6 +289,24 @@ class MainWindow(QMainWindow):
         self.image_area_widget = QWidget()
         image_layout = QVBoxLayout(self.image_area_widget)
 
+        # サムネイルの列数を変更するためのコントロールを追加
+        control_layout = QHBoxLayout()
+        self.decrement_button = QPushButton("-")
+        self.increment_button = QPushButton("+")
+        self.columns_display = QLineEdit()
+        self.columns_display.setFixedWidth(40)
+        self.columns_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.columns_display.setReadOnly(True)
+        self.update_columns_display()
+
+        self.decrement_button.clicked.connect(self.decrement_columns)
+        self.increment_button.clicked.connect(self.increment_columns)
+
+        control_layout.addWidget(self.decrement_button)
+        control_layout.addWidget(self.columns_display)
+        control_layout.addWidget(self.increment_button)
+        image_layout.addLayout(control_layout)
+
         # Search section
         search_layout = QHBoxLayout()
         self.search_box = QLineEdit()
@@ -351,19 +369,37 @@ class MainWindow(QMainWindow):
         # Load images on startup
         self.load_images()
 
+    def update_columns_display(self):
+        self.columns_display.setText(str(self.thumbnail_columns))
+
+    def decrement_columns(self):
+        if self.thumbnail_columns > 1:
+            self.thumbnail_columns -= 1
+            self.update_columns_display()
+            self.update_thumbnail_columns(self.thumbnail_columns)
+
+    def increment_columns(self):
+        if self.thumbnail_columns < 20:
+            self.thumbnail_columns += 1
+            self.update_columns_display()
+            self.update_thumbnail_columns(self.thumbnail_columns)
+            
     def toggle_folder_tree(self):
         if self.folder_view.isVisible():
             self.folder_view.hide()
             self.splitter.setSizes([0, 800])
             self.toggle_button.setText(">>")
-            self.thumbnail_columns = 6  # 列数を6に変更
+            self.thumbnail_columns = self.thumbnail_columns + 1  # 列数を+1
+            self.update_columns_display()
             self.update_thumbnail_columns(self.thumbnail_columns)
         else:
             self.folder_view.show()
             self.splitter.setSizes([250, 800])
             self.toggle_button.setText("<<")
-            self.thumbnail_columns = 5  # 列数を5に戻す
-            self.update_thumbnail_columns(self.thumbnail_columns)
+            if self.thumbnail_columns > 1:
+                self.thumbnail_columns = self.thumbnail_columns - 1   # 列数を-1
+                self.update_columns_display()
+                self.update_thumbnail_columns(self.thumbnail_columns)
                 
         # 検索結果がある場合、それを再表示
         if self.search_results:
@@ -639,7 +675,7 @@ class MainWindow(QMainWindow):
         try:
             if comment.startswith("UNICODE"):
                 comment = comment[7:]
-                
+
             # "parameters:" を取り除く処理
             positive_part = comment.split("Negative prompt: ")[0]
             if "parameters: " in positive_part:
