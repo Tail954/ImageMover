@@ -647,17 +647,30 @@ class MainWindow(QMainWindow):
     def copy_images(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Destination Folder")
         if folder:
-            for i, thumbnail in enumerate(self.selection_order, start=1):
+            # 既存のファイルをチェックして最終番号を取得
+            existing_files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
+            existing_numbers = []
+            for f in existing_files:
+                try:
+                    num = int(f.split('_')[0])
+                    existing_numbers.append(num)
+                except ValueError:
+                    continue
+
+            next_number = max(existing_numbers, default=0) + 1
+
+            # 選択された画像をコピー
+            for thumbnail in self.selection_order:
                 image_path = thumbnail.image_path
-                new_path = os.path.join(folder, f"{i:03}_{os.path.basename(image_path)}")
-                if os.path.exists(new_path):
-                    overwrite = QMessageBox.question(self, "Overwrite", 
-                                                   f"{new_path} already exists. Overwrite?",
-                                                   QMessageBox.StandardButton.Yes | 
-                                                   QMessageBox.StandardButton.No)
-                    if overwrite == QMessageBox.StandardButton.No:
-                        continue
+                base_name = os.path.basename(image_path)
+                new_path = os.path.join(folder, f"{next_number:03}_{base_name}")
+
+                # ファイルをコピー
                 shutil.copy2(image_path, new_path)
+
+                next_number += 1
+
+            self.unselect_all()  # 選択状態を解除
 
     def extract_metadata(self, image_path):
         try:
