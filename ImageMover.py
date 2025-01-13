@@ -251,6 +251,8 @@ class MainWindow(QMainWindow):
         self.current_folder = ""   # 現在のフォルダパスを保持
         self.search_results = []   # 検索結果を保持するリストを追加
         self.thumbnail_columns = 5  # サムネイルの列数を保持する変数を追加
+        self.ui_state_saved = False  # UI状態が記憶されているかを示すフラグ
+        self.ui_state = {}  # UI状態を記憶する辞書
         self.thumbnail_cache = ThumbnailCache()
 
         # 最後に選択したフォルダをロード
@@ -457,9 +459,28 @@ class MainWindow(QMainWindow):
         self.load_images_from_folder(folder_path)
 
     def set_ui_enabled(self, enabled):
-        """UI全体を有効化/無効化する"""
-        for widget in self.findChildren(QWidget):
-            widget.setEnabled(enabled)
+        """UI全体を有効化/無効化し、2回目以降のみ状態を記憶/復元"""
+        if enabled:
+            # 状態が記憶されている場合は元の状態を復元
+            if self.ui_state_saved:
+                for widget, was_enabled in self.ui_state.items():
+                    widget.setEnabled(was_enabled)
+                self.ui_state.clear()
+                self.ui_state_saved = False
+            else:
+                # 状態が記憶されていない場合、self.copy_button以外を有効化
+                for widget in self.findChildren(QWidget):
+                    if widget != self.copy_button:
+                        widget.setEnabled(True)
+        else:
+            # 初回は状態を記憶せず、2回目以降に状態を記憶
+            if not self.ui_state:
+                self.ui_state = {widget: widget.isEnabled() for widget in self.findChildren(QWidget)}
+                self.ui_state_saved = True
+
+            # UIを無効化
+            for widget in self.findChildren(QWidget):
+                widget.setEnabled(False)
 
     # フォルダ内の画像をロードする
     def load_images_from_folder(self, folder):
