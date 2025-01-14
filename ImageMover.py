@@ -45,7 +45,8 @@ class ThumbnailCache:
                 self.cache[image_path] = pixmap
                 return pixmap
             except Exception as e:
-                print(f"Error creating thumbnail for {image_path}: {e}")
+                #cache sizeをコンソールに出力
+                #print(f"Error creating thumbnail for {image_path}: {e}")
                 return None
 
 class ImageLoader(QThread):
@@ -241,6 +242,36 @@ class ImageThumbnail(QLabel):
                 dialog = ImageDialog(self.image_path, main_window)
                 dialog.exec()
 
+class ConfigDialog(QDialog):
+    def __init__(self, current_cache_size, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Config Settings")
+
+        self.current_cache_size = current_cache_size
+
+        self.initUI()
+
+    def initUI(self):
+        layout = QVBoxLayout(self)
+
+        label = QLabel("Cache Size:")
+        self.cache_size_input = QLineEdit(str(self.current_cache_size))
+
+        apply_button = QPushButton("Apply")
+        apply_button.clicked.connect(self.apply_changes)
+
+        layout.addWidget(label)
+        layout.addWidget(self.cache_size_input)
+        layout.addWidget(apply_button)
+
+    def apply_changes(self):
+        try:
+            new_cache_size = int(self.cache_size_input.text())
+            self.parent().update_cache_size(new_cache_size)
+            self.close()
+        except ValueError:
+            QMessageBox.warning(self, "Invalid Input", "Please enter a valid number.")
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -256,14 +287,25 @@ class MainWindow(QMainWindow):
         self.ui_state = {}  # UI状態を記憶する辞書
         self.thumbnail_cache = ThumbnailCache()
 
-        # 最後に選択したフォルダをロード
+        # キャッシュサイズをlast_value.jsonからロード
+        self.cache_size = 1000
         self.load_last_values()
+
         self.initUI()
 
     def initUI(self):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         layout = QVBoxLayout(self.central_widget)
+
+        # Config button
+        config_layout = QHBoxLayout()
+        self.config_button = QPushButton("Config")
+        self.config_button.setFixedWidth(50)
+        self.config_button.clicked.connect(self.open_config_dialog)
+        config_layout.addStretch()
+        config_layout.addWidget(self.config_button)
+        layout.addLayout(config_layout)
 
         # フォルダツリーの幅を０にするトグルボタンを追加
         self.toggle_button = QPushButton("<<")
@@ -374,6 +416,15 @@ class MainWindow(QMainWindow):
         # Load images on startup
         self.load_images()
 
+    def open_config_dialog(self):
+        dialog = ConfigDialog(self.cache_size, self)
+        dialog.exec()
+
+    def update_cache_size(self, new_cache_size):
+        self.cache_size = new_cache_size
+        self.save_last_values()
+        QMessageBox.information(self, "Cache Size Updated", f"Cache size has been updated to {new_cache_size}.")
+
     def update_columns_display(self):
         self.columns_display.setText(str(self.thumbnail_columns))
 
@@ -441,6 +492,7 @@ class MainWindow(QMainWindow):
                 data = json.load(file)
                 self.current_folder = data.get("folder", "")
                 self.thumbnail_columns = data.get("thumbnail_columns", 5)
+                self.cache_size = data.get("cache_size", 1000)
 
     # 最後に選択したフォルダを保存する
     def save_last_values(self):
@@ -448,7 +500,7 @@ class MainWindow(QMainWindow):
             self.thumbnail_columns = self.thumbnail_columns - 1
 
         with open("last_value.json", "w") as file:
-            json.dump({"folder": self.current_folder, "thumbnail_columns": self.thumbnail_columns}, file)
+            json.dump({"folder": self.current_folder, "thumbnail_columns": self.thumbnail_columns,"cache_size": self.cache_size}, file)
 
     def closeEvent(self, event):
         self.save_last_values()
@@ -485,6 +537,7 @@ class MainWindow(QMainWindow):
 
     # フォルダ内の画像をロードする
     def load_images_from_folder(self, folder):
+        print(f"Current cache size: {self.cache_size}")
         self.status_bar.showMessage("Loading images...")
         self.clear_thumbnails()
         self.set_ui_enabled(False)  # UIを無効化
