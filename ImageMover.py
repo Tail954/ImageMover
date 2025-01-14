@@ -648,22 +648,41 @@ class MainWindow(QMainWindow):
 
     def move_images(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Destination Folder")
-        if folder:
-            selected_images = [self.grid_layout.itemAt(i).widget().image_path 
-                             for i in range(self.grid_layout.count()) 
-                             if self.grid_layout.itemAt(i).widget().selected]
-            for image_path in selected_images:
-                new_path = os.path.join(folder, os.path.basename(image_path))
-                os.rename(image_path, new_path)
-            self.unselect_all()  # 選択状態を解除
-            self.filter_box.clear()  # filter_boxの値をクリア
-            self.clear_thumbnails()  # 現在のサムネイルをクリア
-            self.image_loader = ImageLoader(self.image_loader.folder)  # 前回選択したフォルダでImageLoaderを再初期化
-            self.image_loader.update_progress.connect(self.update_image_count)
-            self.image_loader.update_thumbnail.connect(self.add_thumbnail)
-            self.image_loader.finished_loading.connect(self.finalize_loading)
-            self.image_loader.start()
-            self.check_and_remove_empty_folders(self.image_loader.folder)  # サブフォルダの空フォルダをチェック
+        if not folder:
+            return
+
+        renamed_files = []
+        selected_images = [self.grid_layout.itemAt(i).widget().image_path 
+                        for i in range(self.grid_layout.count()) 
+                        if self.grid_layout.itemAt(i).widget().selected]
+
+        for image_path in selected_images:
+            base_name, ext = os.path.splitext(os.path.basename(image_path))
+            new_path = os.path.join(folder, base_name + ext)
+            counter = 1
+
+            # 同じ名前のファイルが存在するかどうかをチェックし、存在すればカウンターを追加
+            while os.path.exists(new_path):
+                new_path = os.path.join(folder, f"{base_name}_{counter}{ext}")
+                counter += 1
+
+            os.rename(image_path, new_path)
+            if counter > 1:
+                renamed_files.append(os.path.basename(new_path))
+
+        self.unselect_all() # 選択状態を解除
+        self.filter_box.clear()  # filter_boxの値をクリア
+        self.clear_thumbnails()  # 現在のサムネイルをクリア
+        self.image_loader = ImageLoader(self.image_loader.folder)  # 前回選択したフォルダでImageLoaderを再初期化
+        self.image_loader.update_progress.connect(self.update_image_count)
+        self.image_loader.update_thumbnail.connect(self.add_thumbnail)
+        self.image_loader.finished_loading.connect(self.finalize_loading)
+        self.image_loader.start()
+        self.check_and_remove_empty_folders(self.image_loader.folder)  # サブフォルダの空フォルダをチェック
+
+        if renamed_files:
+            QMessageBox.information(self, "Renamed Files", "ファイル名が重複したためリネームしました:\n" + "\n".join(renamed_files))
+
 
     def copy_images(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Destination Folder")
