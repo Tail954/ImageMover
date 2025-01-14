@@ -249,7 +249,7 @@ class MainWindow(QMainWindow):
         self.copy_mode = False
         self.selection_order = []  # クリック順序を保持するリスト
         self.current_folder = ""   # 現在のフォルダパスを保持
-        self.search_results = []   # 検索結果を保持するリストを追加
+        self.filter_results = []   # フィルタ結果を保持するリストを追加
         self.thumbnail_columns = 5  # サムネイルの列数を保持する変数を追加
         self.ui_state_saved = False  # UI状態が記憶されているかを示すフラグ
         self.ui_state = {}  # UI状態を記憶する辞書
@@ -311,23 +311,23 @@ class MainWindow(QMainWindow):
         control_layout.addWidget(self.increment_button)
         image_layout.addLayout(control_layout)
 
-        # Search section
-        search_layout = QHBoxLayout()
-        self.search_box = QLineEdit()
-        self.search_button = QPushButton("Search")
-        self.search_button.clicked.connect(self.search_images)
-        self.search_box.returnPressed.connect(self.search_button.click)
+        # filter section
+        filter_layout = QHBoxLayout()
+        self.filter_box = QLineEdit()
+        self.filter_button = QPushButton("Filter")
+        self.filter_button.clicked.connect(self.filter_images)
+        self.filter_box.returnPressed.connect(self.filter_button.click)
         self.and_radio = QRadioButton("and")
         self.or_radio = QRadioButton("or")
         self.or_radio.setChecked(True)
         self.radio_group = QButtonGroup()
         self.radio_group.addButton(self.and_radio)
         self.radio_group.addButton(self.or_radio)
-        search_layout.addWidget(self.search_box)
-        search_layout.addWidget(self.and_radio)
-        search_layout.addWidget(self.or_radio)
-        search_layout.addWidget(self.search_button)
-        image_layout.addLayout(search_layout)
+        filter_layout.addWidget(self.filter_box)
+        filter_layout.addWidget(self.and_radio)
+        filter_layout.addWidget(self.or_radio)
+        filter_layout.addWidget(self.filter_button)
+        image_layout.addLayout(filter_layout)
 
         # UnSelect, Select All, Copy mode, buttons
         button_layout = QHBoxLayout()
@@ -405,11 +405,11 @@ class MainWindow(QMainWindow):
                 self.update_columns_display()
                 self.update_thumbnail_columns(self.thumbnail_columns)
                 
-        # 検索結果がある場合、それを再表示
-        if self.search_results:
+        # フィルタ結果がある場合、それを再表示
+        if self.filter_results:
             self.clear_thumbnails()
             #現在のサムネイルを全て削除する
-            for i, image_path in enumerate(self.search_results):
+            for i, image_path in enumerate(self.filter_results):
                 thumbnail = ImageThumbnail(image_path, self.thumbnail_cache, self.grid_widget)
                 self.grid_layout.addWidget(thumbnail, i // self.thumbnail_columns, 
                                          i % self.thumbnail_columns)
@@ -588,15 +588,15 @@ class MainWindow(QMainWindow):
 
             self.load_images_from_folder(folder)
 
-    def search_images(self):
-        query = self.search_box.text()
+    def filter_images(self):
+        query = self.filter_box.text()
         if not query:
-            self.clear_search()
+            self.clear_filter()
             return
 
-        self.status_bar.showMessage("検索中...")
-        self.search_button.setEnabled(False)
-        self.search_box.setEnabled(False)  # テキストボックスを無効化
+        self.status_bar.showMessage("フィルタ中...")
+        self.filter_button.setEnabled(False)
+        self.filter_box.setEnabled(False)  # テキストボックスを無効化
 
         terms = query.split(',')
         matches = []
@@ -610,7 +610,7 @@ class MainWindow(QMainWindow):
                 if any(term.lower() in metadata.lower() for term in terms):
                     matches.append(image_path)
 
-        self.search_results = matches  # 検索結果を保存
+        self.filter_results = matches  # フィルタ結果を保存
         self.clear_thumbnails()  # 既存のサムネイルをクリア
 
         for i, image_path in enumerate(matches):
@@ -619,11 +619,11 @@ class MainWindow(QMainWindow):
                                      i % self.thumbnail_columns)
 
         self.status_bar.clearMessage()
-        self.search_button.setEnabled(True)
-        self.search_box.setEnabled(True)  # テキストボックスを再度有効化
+        self.filter_button.setEnabled(True)
+        self.filter_box.setEnabled(True)  # テキストボックスを再度有効化
 
-    def clear_search(self):
-        self.search_results = []
+    def clear_filter(self):
+        self.filter_results = []
         self.clear_thumbnails()
         for i, image_path in enumerate(self.images):
             thumbnail = ImageThumbnail(image_path, self.thumbnail_cache, self.grid_widget)
@@ -656,7 +656,7 @@ class MainWindow(QMainWindow):
                 new_path = os.path.join(folder, os.path.basename(image_path))
                 os.rename(image_path, new_path)
             self.unselect_all()  # 選択状態を解除
-            self.search_box.clear()  # search_boxの値をクリア
+            self.filter_box.clear()  # filter_boxの値をクリア
             self.clear_thumbnails()  # 現在のサムネイルをクリア
             self.image_loader = ImageLoader(self.image_loader.folder)  # 前回選択したフォルダでImageLoaderを再初期化
             self.image_loader.update_progress.connect(self.update_image_count)
