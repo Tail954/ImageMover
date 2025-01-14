@@ -221,6 +221,7 @@ class ImageThumbnail(QLabel):
                 else:
                     self.order = -1
                     self.order_label.hide()
+                    main_window.update_selected_count()
             self.setStyleSheet("border: 3px solid orange;" if self.selected else "")
         elif event.button() == Qt.MouseButton.RightButton:
             main_window = self.window()
@@ -499,7 +500,16 @@ class MainWindow(QMainWindow):
         self.image_loader.start()
 
     def update_image_count(self, loaded, total):
-        self.status_bar.showMessage(f"Loading images... {loaded}/{total} images loaded")
+        selected_count = sum(1 for i in range(self.grid_layout.count()) if self.grid_layout.itemAt(i).widget().selected)
+        if not self.copy_mode:
+            self.status_bar.showMessage(f"Total images: {total}, Selected images: {selected_count}")
+        else:
+            self.status_bar.showMessage(f"Total images: {total}")
+
+    def update_selected_count(self):
+        selected_count = sum(1 for i in range(self.grid_layout.count()) if self.grid_layout.itemAt(i).widget().selected)
+        total_images = self.grid_layout.count()
+        self.status_bar.showMessage(f"Total images: {total_images}, Selected images: {selected_count}")
 
     # サムネイルを追加する
     def add_thumbnail(self, image_path, index):
@@ -540,6 +550,7 @@ class MainWindow(QMainWindow):
                     thumbnail.order_label.setText(str(thumbnail.order))
                     thumbnail.order_label.show()
                 thumbnail.setStyleSheet("border: 3px solid orange;")
+        self.update_selected_count()
 
     def unselect_all(self):
         for i in range(self.grid_layout.count()):
@@ -549,6 +560,7 @@ class MainWindow(QMainWindow):
             thumbnail.order = -1  # クリック順序をリセット
             thumbnail.order_label.hide()  # 番号ラベルを非表示にする
         self.selection_order = []
+        self.update_selected_count()
 
     def check_and_remove_empty_folders(self, folder):
         for root, dirs, files in os.walk(folder):
