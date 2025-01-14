@@ -12,13 +12,11 @@ from PyQt6.QtWidgets import (
     QTreeView, QSplitter
 )
 from PyQt6.QtGui import QImage, QPixmap, QFileSystemModel
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QProcess, QDir, QSize
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QProcess
 from pathlib import Path
 import concurrent.futures
-import queue
 import threading
 from functools import lru_cache
-import mimetypes
 
 class ThumbnailCache:
     #サムネイルのキャッシュを管理するクラス
