@@ -314,6 +314,7 @@ class MainWindow(QMainWindow):
         self.ui_state_saved = False  # UI状態が記憶されているかを示すフラグ
         self.ui_state = {}  # UI状態を記憶する辞書
         self.thumbnail_cache = ThumbnailCache()
+        self.current_sort = "filename_asc"  # デフォルトのソート順
 
         # キャッシュサイズをlast_value.jsonからロード
         self.cache_size = 1000
@@ -399,6 +400,43 @@ class MainWindow(QMainWindow):
         filter_layout.addWidget(self.or_radio)
         filter_layout.addWidget(self.filter_button)
         image_layout.addLayout(filter_layout)
+
+        # Sort section
+        sort_layout = QHBoxLayout()
+        # Create sort radio buttons
+        self.filename_asc_radio = QRadioButton("Filename ↑")
+        self.filename_desc_radio = QRadioButton("Filename ↓")
+        self.date_asc_radio = QRadioButton("Date ↑")
+        self.date_desc_radio = QRadioButton("Date ↓")        
+        # Group the radio buttons
+        self.sort_group = QButtonGroup()
+        self.sort_group.addButton(self.filename_asc_radio)
+        self.sort_group.addButton(self.filename_desc_radio)
+        self.sort_group.addButton(self.date_asc_radio)
+        self.sort_group.addButton(self.date_desc_radio)        
+        # Set initial radio button based on saved value
+        if self.current_sort == "filename_asc":
+            self.filename_asc_radio.setChecked(True)
+        elif self.current_sort == "filename_desc":
+            self.filename_desc_radio.setChecked(True)
+        elif self.current_sort == "date_asc":
+            self.date_asc_radio.setChecked(True)
+        elif self.current_sort == "date_desc":
+            self.date_desc_radio.setChecked(True)        
+        # Connect radio buttons to sort function
+        self.filename_asc_radio.toggled.connect(lambda: self.sort_images("filename_asc"))
+        self.filename_desc_radio.toggled.connect(lambda: self.sort_images("filename_desc"))
+        self.date_asc_radio.toggled.connect(lambda: self.sort_images("date_asc"))
+        self.date_desc_radio.toggled.connect(lambda: self.sort_images("date_desc"))       
+        # Add radio buttons to layout
+        sort_layout.addWidget(QLabel("Sort by:"))
+        sort_layout.addWidget(self.filename_asc_radio)
+        sort_layout.addWidget(self.filename_desc_radio)
+        sort_layout.addWidget(self.date_asc_radio)
+        sort_layout.addWidget(self.date_desc_radio)
+        sort_layout.addStretch()        
+        # Add sort layout after filter layout
+        image_layout.addLayout(sort_layout)
 
         # UnSelect, Select All, Copy mode, buttons
         button_layout = QHBoxLayout()
@@ -513,6 +551,68 @@ class MainWindow(QMainWindow):
             if widget:
                 widget.setParent(None)
 
+    def sort_images(self, sort_type):
+        self.current_sort = sort_type
+        
+        # Get current selection and order state
+        current_state = {
+            self.grid_layout.itemAt(i).widget().image_path: {
+                'selected': self.grid_layout.itemAt(i).widget().selected,
+                'order': self.grid_layout.itemAt(i).widget().order
+            }
+            for i in range(self.grid_layout.count())
+        }
+        
+        # Sort images based on selected criteria
+        images_to_sort = self.filter_results if self.filter_results else self.images
+        
+        if sort_type == "filename_asc":
+            sorted_images = sorted(images_to_sort, key=lambda x: os.path.basename(x).lower())
+        elif sort_type == "filename_desc":
+            sorted_images = sorted(images_to_sort, key=lambda x: os.path.basename(x).lower(), reverse=True)
+        elif sort_type == "date_asc":
+            sorted_images = sorted(images_to_sort, key=lambda x: os.path.getmtime(x))
+        else:  # date_desc
+            sorted_images = sorted(images_to_sort, key=lambda x: os.path.getmtime(x), reverse=True)
+        
+        # Clear and rebuild thumbnails
+        self.clear_thumbnails()
+        
+        # Reset selection order list but maintain the order information
+        self.selection_order = []
+        
+        # Recreate thumbnails in sorted order
+        for i, image_path in enumerate(sorted_images):
+            thumbnail = ImageThumbnail(image_path, self.thumbnail_cache, self.grid_widget)
+            
+            # Restore selection state and order
+            if image_path in current_state:
+                state = current_state[image_path]
+                if state['selected']:
+                    thumbnail.selected = True
+                    thumbnail.setStyleSheet("border: 3px solid orange;")
+                    
+                    # Restore copy mode order if in copy mode
+                    if self.copy_mode and state['order'] > 0:
+                        thumbnail.order = state['order']
+                        thumbnail.order_label.setText(str(thumbnail.order))
+                        thumbnail.order_label.show()
+                        # Insert thumbnail at the correct position in selection_order
+                        while len(self.selection_order) < state['order']:
+                            self.selection_order.append(None)
+                        self.selection_order[state['order'] - 1] = thumbnail
+        
+            self.grid_layout.addWidget(thumbnail, i // self.thumbnail_columns, 
+                                    i % self.thumbnail_columns)
+        
+        # Clean up selection_order list by removing any None entries
+        self.selection_order = [x for x in self.selection_order if x is not None]
+        
+        if self.filter_results:
+            self.filter_results = sorted_images
+        else:
+            self.images = sorted_images
+
     # 最後に選択したフォルダをロードする
     def load_last_values(self):
         if os.path.exists("last_value.json"):
@@ -521,6 +621,7 @@ class MainWindow(QMainWindow):
                 self.current_folder = data.get("folder", "")
                 self.thumbnail_columns = data.get("thumbnail_columns", 5)
                 self.cache_size = data.get("cache_size", 1000)
+                self.current_sort = data.get("sort_order", "filename_asc")
 
     # 最後に選択したフォルダを保存する
     def save_last_values(self):
@@ -528,7 +629,12 @@ class MainWindow(QMainWindow):
             self.thumbnail_columns = self.thumbnail_columns - 1
 
         with open("last_value.json", "w") as file:
-            json.dump({"folder": self.current_folder, "thumbnail_columns": self.thumbnail_columns,"cache_size": self.cache_size}, file)
+            json.dump({
+                "folder": self.current_folder,
+                "thumbnail_columns": self.thumbnail_columns,
+                "cache_size": self.cache_size,
+                "sort_order": self.current_sort
+            }, file)
 
     def closeEvent(self, event):
         self.save_last_values()
@@ -600,6 +706,8 @@ class MainWindow(QMainWindow):
     # 画像のロードが完了したときに呼び出されるスロット
     def finalize_loading(self, images):
         self.images = images
+        # 新しい画像が読み込まれたときに現在の並べ替え順序を適用
+        self.sort_images(self.current_sort)
         self.status_bar.showMessage(f"Total images: {len(self.images)}")
         self.set_ui_enabled(True)  # UIを有効化
         
