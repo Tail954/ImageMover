@@ -25,27 +25,49 @@ class ThumbnailCache:
         self.max_size = max_size
         self.lock = threading.Lock()
 
-    @lru_cache(maxsize=1000)
+    #@lru_cache(maxsize=1000)
     def get_thumbnail(self, image_path, size):
-        #キャッシュからサムネイルを取得または生成
+        """キャッシュからサムネイルを取得、または新規作成"""
+        cache_key = f"{image_path}_{size}"
+        
         with self.lock:
-            if image_path in self.cache:
-                return self.cache[image_path]
+            # キャッシュヒット
+            if cache_key in self.cache:
+                print(f"Cache hit: {image_path}")
+                return self.cache[cache_key]
+
+        # キャッシュミス時にサムネイルを生成
+        print(f"Cache miss, generating thumbnail: {image_path}")
+        try:
+            image = QImage(image_path)
+            pixmap = QPixmap.fromImage(image).scaled(
+                size, size, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
             
-            try:
-                image = QImage(image_path)
-                pixmap = QPixmap.fromImage(image).scaled(
-                    size, size, Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation
-                )
+            # キャッシュに追加
+            with self.lock:
                 if len(self.cache) >= self.max_size:
-                    self.cache.pop(next(iter(self.cache)))
-                self.cache[image_path] = pixmap
-                return pixmap
-            except Exception as e:
-                #cache sizeをコンソールに出力
-                #print(f"Error creating thumbnail for {image_path}: {e}")
-                return None
+                    oldest_key = next(iter(self.cache))
+                    del self.cache[oldest_key]
+                self.cache[cache_key] = pixmap
+            
+            return pixmap
+        except Exception as e:
+            print(f"Error creating thumbnail for {image_path}: {e}")
+            return None
+
+    def clear(self):
+        """キャッシュをクリア"""
+        with self.lock:
+            self.cache.clear()
+
+    def resize(self, new_max_size):
+        """キャッシュサイズを変更"""
+        with self.lock:
+            self.max_size = new_max_size
+            while len(self.cache) > self.max_size:
+                self.cache.pop(next(iter(self.cache)))
 
 class ImageLoader(QThread):
     #非同期で画像をロードするスレッド
@@ -53,19 +75,20 @@ class ImageLoader(QThread):
     update_thumbnail = pyqtSignal(str, int)
     finished_loading = pyqtSignal(list)
 
-    def __init__(self, folder, thumbnail_size=200):
+    def __init__(self, folder, thumbnail_cache, thumbnail_size=200):
         super().__init__()
         self.folder = folder
         self.thumbnail_size = thumbnail_size
         self.images = []
         self.total_files = 0
         self._is_running = True
-        self.thumbnail_cache = ThumbnailCache()
+        self.thumbnail_cache = thumbnail_cache  # 修正: キャッシュを外部から受け取る
         self.valid_extensions = {'.png', '.jpeg', '.jpg', '.webp'}
 
     def stop(self):
         #スレッドを停止
         self._is_running = False
+        self.wait()  # スレッドの終了を待つ
 
     def is_valid_image(self, file_path):
         #ファイルが有効な画像かどうかチェック
@@ -106,9 +129,16 @@ class ImageLoader(QThread):
         except Exception as e:
             print(f"Error in image loader: {e}")
 
+    def is_cached(self, image_path):
+        return image_path in self.thumbnail_cache.cache
+    
     def process_image(self, image_path):
-        #個々の画像を処理
         try:
+            # キャッシュキーを生成
+            cache_key = f"{image_path}_{self.thumbnail_size}"
+            if cache_key in self.thumbnail_cache.cache:
+                return True
+            
             self.thumbnail_cache.get_thumbnail(image_path, self.thumbnail_size)
             return True
         except Exception as e:
@@ -194,7 +224,7 @@ class ImageThumbnail(QLabel):
                 self.setText("Error")
         except Exception as e:
             print(f"Error loading thumbnail: {e}")
-            self.setText("Error")
+            self.setText("Failed to load thumbnail")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -535,16 +565,15 @@ class MainWindow(QMainWindow):
 
     # フォルダ内の画像をロードする
     def load_images_from_folder(self, folder):
-        print(f"Current cache size: {self.cache_size}")
+        #print(f"Current cache size: {self.cache_size}")
         self.status_bar.showMessage("Loading images...")
         self.clear_thumbnails()
         self.set_ui_enabled(False)  # UIを無効化
         
         if hasattr(self, 'image_loader'):
             self.image_loader.stop()
-            self.image_loader.wait()
         
-        self.image_loader = ImageLoader(folder)
+        self.image_loader = ImageLoader(folder, self.thumbnail_cache)
         self.image_loader.update_progress.connect(self.update_image_count)
         self.image_loader.update_thumbnail.connect(self.add_thumbnail)
         self.image_loader.finished_loading.connect(self.finalize_loading)
@@ -736,7 +765,8 @@ class MainWindow(QMainWindow):
         self.unselect_all() # 選択状態を解除
         self.filter_box.clear()  # filter_boxの値をクリア
         self.clear_thumbnails()  # 現在のサムネイルをクリア
-        self.image_loader = ImageLoader(self.image_loader.folder)  # 前回選択したフォルダでImageLoaderを再初期化
+
+        self.image_loader = ImageLoader(self.image_loader.folder, self.thumbnail_cache) # 前回選択したフォルダでImageLoaderを再初期化
         self.image_loader.update_progress.connect(self.update_image_count)
         self.image_loader.update_thumbnail.connect(self.add_thumbnail)
         self.image_loader.finished_loading.connect(self.finalize_loading)
