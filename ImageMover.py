@@ -808,32 +808,33 @@ class MainWindow(QMainWindow):
     def extract_metadata(self, image_path):
         try:
             metadata = {}
-
             if image_path.lower().endswith('.png'):
-                image = QImage(image_path)
-                raw_metadata = image.text()
-                if raw_metadata:
-                    metadata.update(self.parse_metadata(raw_metadata))
-                else:
-                    metadata["Comment"] = "No Metadata found in PNG text chunks."
+                metadata = self._extract_png_metadata(image_path)
             else:
-                img = Image.open(image_path)
-                exif_data = img.info.get('exif')
-
-                if exif_data:
-                    exif_dict = piexif.load(exif_data)
-                    user_comment = exif_dict['Exif'].get(piexif.ExifIFD.UserComment)
-
-                    if user_comment:
-                        comment = self.decode_unicode(user_comment)
-                        metadata.update(self.parse_metadata(comment))
-                    else:
-                        metadata["UserComment"] = "No UserComment found in EXIF data."
-
+                metadata = self._extract_exif_metadata(image_path)
             return json.dumps(metadata, indent=4)
         except Exception as e:
             print(f"Error extracting metadata: {e}")
             return "Error extracting metadata"
+
+    def _extract_png_metadata(self, image_path):
+        image = QImage(image_path)
+        raw_metadata = image.text()
+        if raw_metadata:
+            return self.parse_metadata(raw_metadata)
+        return {"Comment": "No Metadata found in PNG text chunks."}
+
+    def _extract_exif_metadata(self, image_path):
+        img = Image.open(image_path)
+        exif_data = img.info.get('exif')
+        if exif_data:
+            exif_dict = piexif.load(exif_data)
+            user_comment = exif_dict['Exif'].get(piexif.ExifIFD.UserComment)
+            if user_comment:
+                comment = self.decode_unicode(user_comment)
+                return self.parse_metadata(comment)
+            return {"UserComment": "No UserComment found in EXIF data."}
+        return {}
 
     def decode_unicode(self, array):
         try:
