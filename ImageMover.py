@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QFileDialog, QLabel, QPushButton,
     QVBoxLayout, QHBoxLayout, QRadioButton, QLineEdit, QTextEdit, QDialog,
     QScrollArea, QWidget, QGridLayout, QButtonGroup, QStatusBar, QMessageBox,
-    QTreeView, QSplitter
+    QTreeView, QSplitter,QGroupBox
 )
 from PyQt6.QtGui import QImage, QPixmap, QFileSystemModel
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QProcess
@@ -176,22 +176,125 @@ class MetadataDialog(QDialog):
         self.setMinimumSize(400, 600)
 
 class ImageDialog(QDialog):
-    def __init__(self, image_path, parent=None):
+    def __init__(self, image_path, preview_mode='seamless', parent=None):
         super().__init__(parent)
         self.setWindowTitle("Full Image")
+        self.preview_mode = preview_mode
+        self.scale_factor = 1.0
+        self.saved_geometry = None  # サイズと位置を保存するための変数
+        
+        # レイアウトの初期化
+        self.layout = QVBoxLayout()
+        
+        # 最大化ボタンを含むツールバーの作成（ホイールモード用）
+        self.tool_layout = QHBoxLayout()
+        self.tool_layout.addStretch()
+        self.maximize_button = QPushButton("□")
+        self.maximize_button.setFixedSize(30, 30)
+        self.maximize_button.clicked.connect(self.toggle_maximize)
+        self.tool_layout.addWidget(self.maximize_button)
+        self.layout.addLayout(self.tool_layout)
+        
+        # 画像表示用のウィジェット
+        if self.preview_mode == 'seamless':
+            self.setup_seamless_mode(image_path)
+        else:
+            self.setup_wheel_mode(image_path)
+            
+        self.setLayout(self.layout)
+        self.setMinimumSize(200, 200)
+        
+    def setup_seamless_mode(self, image_path):
         self.image_label = QLabel(self)
         self.pixmap = QPixmap(image_path)
         self.image_label.setPixmap(self.pixmap)
-        layout = QVBoxLayout()
-        layout.addWidget(self.image_label)
-        self.setLayout(layout)
-        self.setMinimumSize(200, 200)
+        self.layout.addWidget(self.image_label)
+        
+    def setup_wheel_mode(self, image_path):
+        # スクロールエリアの設定
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        
+        # 画像ラベルの設定
+        self.image_label = QLabel()
+        self.pixmap = QPixmap(image_path)
+        self.image_label.setPixmap(self.pixmap)
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # スクロールエリアに画像ラベルを設定
+        self.scroll_area.setWidget(self.image_label)
+        self.layout.addWidget(self.scroll_area)
+        
+        self.setToolTip("Ctrl + ホイールでズーム、ドラッグでスクロール")
+        
+        self.resize(1000,900)
+        
+    def wheelEvent(self, event):
+        if self.preview_mode == 'wheel':
+            # Ctrlキーが押されている場合のみズーム
+            if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+                delta = event.angleDelta().y()
+                if delta > 0:
+                    self.scale_factor *= 1.1
+                else:
+                    self.scale_factor *= 0.9
+                
+                # スケーリングした画像を表示
+                scaled_pixmap = self.pixmap.scaled(
+                    self.pixmap.size() * self.scale_factor,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                self.image_label.setPixmap(scaled_pixmap)
+            else:
+                # 通常のスクロール
+                self.scroll_area.verticalScrollBar().setValue(
+                    self.scroll_area.verticalScrollBar().value() - event.angleDelta().y()
+                )
+    
+    # ウィンドウサイズ以上に拡大されていたらマウスドラッグでスクロール
+    def mousePressEvent(self, event):
+        if self.preview_mode == 'wheel' and (self.image_label.size().width() > self.size().width() or self.image_label.size().height() > self.size().height()):
+            self.drag_start = event.pos()
+            self.scroll_start_v = self.scroll_area.verticalScrollBar().value()
+            self.scroll_start_h = self.scroll_area.horizontalScrollBar().value()
+
+    def mouseMoveEvent(self, event):
+        if self.preview_mode == 'wheel' and (self.image_label.size().width() > self.size().width() or self.image_label.size().height() > self.size().height()):
+            delta = event.pos() - self.drag_start
+            self.scroll_area.verticalScrollBar().setValue(self.scroll_start_v - delta.y())
+            self.scroll_area.horizontalScrollBar().setValue(self.scroll_start_h - delta.x())
 
     def resizeEvent(self, event):
-        new_pixmap = self.pixmap.scaled(
-            self.size(), Qt.AspectRatioMode.KeepAspectRatio, 
-            Qt.TransformationMode.SmoothTransformation)
-        self.image_label.setPixmap(new_pixmap)
+        if self.preview_mode == 'seamless':
+            new_pixmap = self.pixmap.scaled(
+                self.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.image_label.setPixmap(new_pixmap)
+        else:
+            super().resizeEvent(event)
+
+    def toggle_maximize(self):
+        # 現在のウィンドウサイズを取得
+        current_size = self.size()
+        # 現在のディスプレイ解像度を取得
+        # ディスプレイ解像度に合わせてウィンドウサイズを変更
+        screen = QApplication.primaryScreen()
+
+        if self.windowState() != Qt.WindowState.WindowMaximized: 
+            if self.saved_geometry is None:
+                self.saved_geometry = self.saveGeometry()   
+
+            self.setWindowState(Qt.WindowState.WindowMaximized)
+            self.maximize_button.setText("❐")
+        else:
+            if self.saved_geometry:
+                self.restoreGeometry(self.saved_geometry)
+                self.setWindowState(Qt.WindowState.WindowNoState)
+                self.maximize_button.setText("□")
+                self.saved_geometry = None  # 記憶した情報をクリア
 
 class ImageThumbnail(QLabel):
     def __init__(self, image_path, thumbnail_cache, parent=None):
@@ -267,36 +370,61 @@ class ImageThumbnail(QLabel):
             while main_window and not isinstance(main_window, MainWindow):
                 main_window = main_window.parent()
             if main_window:
-                dialog = ImageDialog(self.image_path, main_window)
+                dialog = ImageDialog(self.image_path, main_window.preview_mode, main_window)
                 dialog.exec()
 
 class ConfigDialog(QDialog):
-    def __init__(self, current_cache_size, parent=None):
+    def __init__(self, current_cache_size, current_preview_mode='seamless', parent=None):
         super().__init__(parent)
         self.setWindowTitle("Config Settings")
-
         self.current_cache_size = current_cache_size
-
+        self.current_preview_mode = current_preview_mode
+        self.main_window = parent  # 親ウィンドウへの参照を保持
         self.initUI()
 
     def initUI(self):
         layout = QVBoxLayout(self)
 
+        # キャッシュサイズ設定
+        cache_group = QGroupBox("Cache Settings")
+        cache_layout = QVBoxLayout()
         label = QLabel("Cache Size:")
         self.cache_size_input = QLineEdit(str(self.current_cache_size))
+        cache_layout.addWidget(label)
+        cache_layout.addWidget(self.cache_size_input)
+        cache_group.setLayout(cache_layout)
+        
+        # 画像表示モード設定
+        display_group = QGroupBox("Preview mode")
+        display_layout = QVBoxLayout()
+        self.seamless_radio = QRadioButton("シームレス")
+        self.wheel_radio = QRadioButton("ホイール")
+        if self.current_preview_mode == 'seamless':
+            self.seamless_radio.setChecked(True)
+        else:
+            self.wheel_radio.setChecked(True)
+        display_layout.addWidget(self.seamless_radio)
+        display_layout.addWidget(self.wheel_radio)
+        display_group.setLayout(display_layout)
 
+        # 適用ボタン
         apply_button = QPushButton("Apply")
         apply_button.clicked.connect(self.apply_changes)
 
-        layout.addWidget(label)
-        layout.addWidget(self.cache_size_input)
+        layout.addWidget(cache_group)
+        layout.addWidget(display_group)
         layout.addWidget(apply_button)
 
     def apply_changes(self):
         try:
             new_cache_size = int(self.cache_size_input.text())
-            self.parent().update_cache_size(new_cache_size)
-            self.close()
+            preview_mode = 'seamless' if self.seamless_radio.isChecked() else 'wheel'
+            # 親ウィンドウの参照を使用
+            if self.main_window:
+                self.main_window.update_config(new_cache_size, preview_mode)
+                self.close()
+            else:
+                QMessageBox.warning(self, "Error", "Parent window not found.")
         except ValueError:
             QMessageBox.warning(self, "Invalid Input", "Please enter a valid number.")
 
@@ -315,8 +443,9 @@ class MainWindow(QMainWindow):
         self.ui_state = {}  # UI状態を記憶する辞書
         self.thumbnail_cache = ThumbnailCache()
         self.current_sort = "filename_asc"  # デフォルトのソート順
+        self.preview_mode = 'seamless'  # デフォルト値を追加
 
-        # キャッシュサイズをlast_value.jsonからロード
+        # キャッシュサイズとpreview_modeをlast_value.jsonからロード
         self.cache_size = 1000
         self.load_last_values()
 
@@ -483,7 +612,12 @@ class MainWindow(QMainWindow):
         self.load_images()
 
     def open_config_dialog(self):
-        dialog = ConfigDialog(self.cache_size, self)
+        # ConfigDialogにself（MainWindow）を親として明示的に渡す
+        dialog = ConfigDialog(
+            current_cache_size=self.cache_size,
+            current_preview_mode=self.preview_mode,
+            parent=self
+        )
         dialog.exec()
 
     def update_cache_size(self, new_cache_size):
@@ -622,6 +756,7 @@ class MainWindow(QMainWindow):
                 self.thumbnail_columns = data.get("thumbnail_columns", 5)
                 self.cache_size = data.get("cache_size", 1000)
                 self.current_sort = data.get("sort_order", "filename_asc")
+                self.preview_mode = data.get("preview_mode", "seamless")
 
     # 最後に選択したフォルダを保存する
     def save_last_values(self):
@@ -633,8 +768,25 @@ class MainWindow(QMainWindow):
                 "folder": self.current_folder,
                 "thumbnail_columns": self.thumbnail_columns,
                 "cache_size": self.cache_size,
-                "sort_order": self.current_sort
+                "sort_order": self.current_sort,
+                "preview_mode": self.preview_mode
             }, file)
+
+    def update_config(self, new_cache_size, new_preview_mode):
+        self.cache_size = new_cache_size
+        self.preview_mode = new_preview_mode
+
+        # 表示するモードに基づいてメッセージを設定
+        if new_preview_mode == 'wheel':
+            preview_mode_text = "ホイール"
+        elif new_preview_mode == 'seamless':
+            preview_mode_text = "シームレス"
+        else:
+            preview_mode_text = new_preview_mode  # それ以外のケースも考慮
+    
+        self.save_last_values()
+        QMessageBox.information(self, "Settings Updated", 
+                              f"Cache size: {new_cache_size}\nPreview mode: {preview_mode_text}")
 
     def closeEvent(self, event):
         self.save_last_values()
