@@ -5,7 +5,7 @@ Stable Defusion WebUIやreforgeで生成された画像ファイルを移動、�
 WebUIのデフォルト設定で作成される日付ごとのフォルダをまとめてチェックすることを想定しています。\
 コピーする際は、並べやすいようにファイル名の先頭に連番をつけます。\
 対応している拡張子は`png` `jpeg` `webp` です。
-![Image](https://github.com/user-attachments/assets/1e4ca108-4813-4854-9d22-a0d534330eb9)
+![Image](https://github.com/user-attachments/assets/f1e86b7f-dc72-47ce-b329-f7a143062b1d)
 ## 既知の問題
 - 空のフォルダが入れ子になっていると最下層のフォルダしか削除されない。
 
