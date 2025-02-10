@@ -157,9 +157,11 @@ class MetadataDialog(QDialog):
         self.negative_edit = QTextEdit(self)
         self.others_edit = QTextEdit(self)
 
-        self.positive_edit.setPlainText(metadata_dict.get("positive", "No positive metadata"))
-        self.negative_edit.setPlainText(metadata_dict.get("negative", "No negative metadata"))
-        self.others_edit.setPlainText(metadata_dict.get("others", "No other metadata"))
+        # parse_parameters の戻り値に合わせたキーに変更
+        self.positive_edit.setPlainText(metadata_dict.get("positive_prompt", "No positive metadata"))
+        self.negative_edit.setPlainText(metadata_dict.get("negative_prompt", "No negative metadata"))
+        self.others_edit.setPlainText(metadata_dict.get("generation_info", "No generation info"))
+
 
         self.positive_edit.setReadOnly(True)
         self.negative_edit.setReadOnly(True)
@@ -1067,64 +1069,114 @@ class MainWindow(QMainWindow):
 
     def extract_metadata(self, image_path):
         try:
-            metadata = {}
-            if image_path.lower().endswith('.png'):
-                metadata = self._extract_png_metadata(image_path)
-            else:
-                metadata = self._extract_exif_metadata(image_path)
-            return json.dumps(metadata, indent=4)
+            with Image.open(image_path) as img:
+                metadata = {}
+
+                # PNGとEXIFの両方のメタデータを確認
+                for key, value in img.info.items():
+                    try:
+                        if key == 'exif':
+                            metadata[key] = self.decode_exif(value)
+                        elif key == 'parameters':
+                            # Stable Diffusionのパラメータ
+                            metadata[key] = value
+                        elif isinstance(value, str):
+                            try:
+                                json_value = json.loads(value)
+                                metadata[key] = json_value
+                            except:
+                                metadata[key] = value
+                        else:
+                            metadata[key] = value
+                    except Exception as e:
+                        metadata[key] = f"解析エラー: {str(e)}"
+
+                # パラメータの解析（PNGとEXIFの両方に対応）
+                params = {'positive_prompt': '', 'negative_prompt': '', 'generation_info': ''}
+                if 'parameters' in metadata:
+                    params = self.parse_parameters(metadata['parameters'])
+                elif 'exif' in metadata:
+                    params = self.parse_parameters(metadata['exif'])
+
+                # 最終的なメタデータを結合
+                metadata.update(params)
+
+                return json.dumps(metadata, indent=4)
+
         except Exception as e:
-            print(f"Error extracting metadata: {e}")
-            return "Error extracting metadata"
+            return json.dumps({"error": str(e)}, indent=4)
 
-    def _extract_png_metadata(self, image_path):
-        image = QImage(image_path)
-        raw_metadata = image.text()
-        if raw_metadata:
-            return self.parse_metadata(raw_metadata)
-        return {"Comment": "No Metadata found in PNG text chunks."}
+    def decode_exif(self, exif_data):
+        if isinstance(exif_data, bytes):
+            try:
+                unicode_start = exif_data.find(b'UNICODE\x00\x00')
+                if unicode_start != -1:
+                    data = exif_data[unicode_start + 8:]
+                    try:
+                        return data.decode('utf-16-be')
+                    except:
+                        return data.decode('utf-16-le')
+                else:
+                    return exif_data.decode('utf-8', errors='ignore')
+            except Exception as e:
+                return f"デコードエラー: {str(e)}"
+        return str(exif_data)
 
-    def _extract_exif_metadata(self, image_path):
-        img = Image.open(image_path)
-        exif_data = img.info.get('exif')
-        if exif_data:
-            exif_dict = piexif.load(exif_data)
-            user_comment = exif_dict['Exif'].get(piexif.ExifIFD.UserComment)
-            if user_comment:
-                comment = self.decode_unicode(user_comment)
-                return self.parse_metadata(comment)
-            return {"UserComment": "No UserComment found in EXIF data."}
-        return {}
 
-    def decode_unicode(self, array):
-        try:
-            return "".join(chr(b) for b in array if b != 0)
-        except Exception as e:
-            print(f"Error decoding unicode: {e}")
-            return "Error decoding unicode"
 
-    def parse_metadata(self, comment):
-        metadata = {
-            "positive": "",
-            "negative": "",
-            "others": ""
+    def parse_parameters(self, text):
+        print("parse_parameters に渡された文字列:", text)  # デバッグ用
+        params = {
+            'positive_prompt': '',
+            'negative_prompt': '',
+            'generation_info': ''
         }
         try:
-            if comment.startswith("UNICODE"):
-                comment = comment[7:]
+            # Negative promptの検出（複数のフォーマットに対応）
+            neg_markers = ['Negative prompt:', 'negative_prompt:', 'neg_prompt:']
+            neg_prompt_start = -1
+            
+            for marker in neg_markers:
+                pos = text.find(marker)
+                if pos != -1:
+                    neg_prompt_start = pos
+                    break
 
-            # "parameters:" を取り除く処理
-            positive_part = comment.split("Negative prompt: ")[0]
-            if "parameters: " in positive_part:
-                positive_part = positive_part.replace("parameters: ", "").strip()
+            # 生成情報の開始位置を検出
+            info_markers = ['Steps:', 'Model:', 'Size:', 'Seed:']
+            steps_start = -1
+            
+            for marker in info_markers:
+                pos = text.find(marker)
+                if pos != -1 and (steps_start == -1 or pos < steps_start):
+                    steps_start = pos
 
-            metadata["positive"] = positive_part
-            metadata["negative"] = comment.split("Negative prompt: ")[1].split("Steps: ")[0]
-            metadata["others"] = "Steps: " + comment.split("Steps: ")[1]
-        except IndexError:
-            metadata["others"] = comment
+            if neg_prompt_start != -1:
+                params['positive_prompt'] = text[:neg_prompt_start].strip()
+                if steps_start != -1:
+                    marker_found = [m for m in neg_markers if text[neg_prompt_start:].startswith(m)]
+                    if marker_found:
+                        neg_length = len(marker_found[0])
+                        params['negative_prompt'] = text[neg_prompt_start + neg_length:steps_start].strip()
+                        params['generation_info'] = text[steps_start:].strip()
+                    else:
+                        params['negative_prompt'] = text[neg_prompt_start:].strip()
+                else:
+                    params['negative_prompt'] = text[neg_prompt_start:].strip()
+            else:
+                if steps_start != -1:
+                    params['positive_prompt'] = text[:steps_start].strip()
+                    params['generation_info'] = text[steps_start:].strip()
+                else:
+                    params['positive_prompt'] = text.strip()
 
-        return metadata
+        except Exception as e:
+            print(f"パース中にエラーが発生: {str(e)}")
+
+        print("parse_parameters の結果:", params)  # デバッグ用
+        return params
+
+
     
     def restart_application(self):
         QApplication.quit()
