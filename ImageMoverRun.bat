@@ -19,7 +19,7 @@ IF EXIST requirements.txt (
 
 REM ImageMover.pyを実行
 echo ImageMover.pyを実行しています...
-python ImageMover.py
+python main.py
 
 REM 仮想環境を非アクティブ化
 deactivate
