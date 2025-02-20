@@ -180,11 +180,14 @@ class MainWindow(QMainWindow):
 
         # 移動／コピー操作用ボタン
         move_copy_layout = QHBoxLayout()
+        self.wc_creator_button = QPushButton("WC Creator")
+        self.wc_creator_button.clicked.connect(self.open_wc_creator)
         self.move_button = QPushButton("Move")
         self.move_button.clicked.connect(self.move_images)
         self.copy_button = QPushButton("Copy")
         self.copy_button.setEnabled(False)
         self.copy_button.clicked.connect(self.copy_images)
+        move_copy_layout.addWidget(self.wc_creator_button)
         move_copy_layout.addWidget(self.move_button)
         move_copy_layout.addWidget(self.copy_button)
         image_layout.addLayout(move_copy_layout)
@@ -484,6 +487,7 @@ class MainWindow(QMainWindow):
         self.copy_mode_button.setText("Copy Mode Exit" if self.copy_mode else "Copy Mode")
         self.move_button.setEnabled(not self.copy_mode)
         self.copy_button.setEnabled(self.copy_mode)
+        self.wc_creator_button.setEnabled(not self.copy_mode)
         for i in range(self.grid_layout.count()):
             thumb = self.grid_layout.itemAt(i).widget()
             if thumb:
@@ -553,6 +557,21 @@ class MainWindow(QMainWindow):
 
     def extract_metadata(self, image_path):
         return extract_metadata(image_path)
+
+    def open_wc_creator(self):
+        selected_images = [self.grid_layout.itemAt(i).widget().image_path 
+                        for i in range(self.grid_layout.count()) 
+                        if self.grid_layout.itemAt(i).widget().selected]
+        
+        if not selected_images:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "No Selection", 
+                            "Please select at least one image first.")
+            return
+        
+        from modules.wc_creator import WCCreatorDialog
+        dialog = WCCreatorDialog(selected_images, self.thumbnail_cache, self)
+        dialog.exec()
 
     def restart_application(self):
         self.close()
