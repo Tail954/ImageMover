@@ -263,6 +263,7 @@ class OutputDialog(QDialog):
         self.checked_only = checked_only
         
         self.text_data = []  # Store generated text for each image
+        self.output_widgets = []
         
         self.initUI()
         self.load_all_data()
@@ -270,6 +271,26 @@ class OutputDialog(QDialog):
     def initUI(self):
         main_layout = QVBoxLayout(self)
         
+        # 追加：文字列置換用UIをOutputDialog上部に配置する
+        replacement_layout = QHBoxLayout()
+        # 左側に縦並びの2つのテキストボックス
+        search_replace_layout = QVBoxLayout()
+        self.search_line_edit = QLineEdit()
+        self.search_line_edit.setPlaceholderText("Search String")
+        self.replace_line_edit = QLineEdit()
+        self.replace_line_edit.setPlaceholderText("Replace String")
+        search_replace_layout.addWidget(self.search_line_edit)
+        search_replace_layout.addWidget(self.replace_line_edit)
+        replacement_layout.addLayout(search_replace_layout)
+        
+        # 右側にReplaceボタン
+        self.replace_button = QPushButton("Replace")
+        self.replace_button.clicked.connect(self.replace_text)
+        replacement_layout.addWidget(self.replace_button)
+        
+        # 追加UIを最上部に配置
+        main_layout.addLayout(replacement_layout)
+
         # Scroll area
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -359,6 +380,25 @@ class OutputDialog(QDialog):
                 'comment': comment_edit,
                 'prompt': prompt_edit
             })
+
+    def replace_text(self):
+        """検索文字列と置換後文字列に基づいて、各出力ウィジェットのテキストを置換する"""
+        search_str = self.search_line_edit.text()
+        replace_str = self.replace_line_edit.text()
+        if not search_str:
+            return  # 検索文字列が空なら何もしない
+        
+        # 各ウィジェットのテキストを更新
+        for widgets in self.output_widgets:
+            # コメント欄の文字列置換
+            comment_text = widgets['comment'].text()
+            new_comment_text = comment_text.replace(search_str, replace_str)
+            widgets['comment'].setText(new_comment_text)
+            
+            # プロンプト欄の文字列置換
+            prompt_text = widgets['prompt'].toPlainText()
+            new_prompt_text = prompt_text.replace(search_str, replace_str)
+            widgets['prompt'].setPlainText(new_prompt_text)
 
     def get_output_text(self):
         output_lines = []
