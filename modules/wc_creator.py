@@ -9,12 +9,13 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 
 class WCCreatorDialog(QDialog):
-    def __init__(self, selected_images, thumbnail_cache, parent=None):
+    def __init__(self, selected_images, thumbnail_cache, output_format="separate_lines", parent=None):
         super().__init__(parent)
         self.setWindowTitle("WC Creator")
         self.setGeometry(100, 100, 900, 600)
         self.selected_images = selected_images
         self.thumbnail_cache = thumbnail_cache
+        self.output_format = output_format
         self.current_index = 0
         self.comment_cache = {}  # Cache for comment text
         self.checkbox_state_cache = {}  # Cache for checkbox states
@@ -228,11 +229,19 @@ class WCCreatorDialog(QDialog):
         # Join lines without adding commas
         combined_prompt = " ".join(selected_lines)
         
-        # Format output according to spec
-        if comment:
-            return f"# {comment}\n{combined_prompt}"
+        # Format output according to output_format setting
+        if self.output_format == "separate_lines":
+            # 行頭に '#' を付けて別行に出力（既存動作）
+            if comment:
+                return f"# {comment}\n{combined_prompt}"
+            else:
+                return combined_prompt
         else:
-            return combined_prompt
+            # [:100]で先頭に出力（新規動作）
+            if comment:
+                return f"[{comment}:100]{combined_prompt}"
+            else:
+                return combined_prompt
     
     def copy_to_clipboard(self):
         output_text = self.get_formatted_output(checked_only=True)
@@ -246,13 +255,13 @@ class WCCreatorDialog(QDialog):
         # Create and show output dialog
         dialog = OutputDialog(self.selected_images, self.thumbnail_cache, 
                               self.comment_cache, self.checkbox_state_cache,
-                              checked_only, self)
+                              checked_only, self.output_format, self)
         dialog.exec()
 
 
 class OutputDialog(QDialog):
     def __init__(self, selected_images, thumbnail_cache, comment_cache, 
-                 checkbox_cache, checked_only, parent=None):
+                 checkbox_cache, checked_only, output_format="separate_lines", parent=None):
         super().__init__(parent)
         self.setWindowTitle("Output Preview")
         self.setGeometry(100, 100, 1000, 700)
@@ -261,6 +270,7 @@ class OutputDialog(QDialog):
         self.comment_cache = comment_cache
         self.checkbox_cache = checkbox_cache
         self.checked_only = checked_only
+        self.output_format = output_format
         
         self.text_data = []  # Store generated text for each image
         self.output_widgets = []
@@ -407,10 +417,18 @@ class OutputDialog(QDialog):
             comment = widgets['comment'].text().strip()
             prompt = widgets['prompt'].toPlainText().strip()
             
-            if comment:
-                output_lines.append(f"# {comment}")
-            if prompt:
-                output_lines.append(prompt)
+            if self.output_format == "separate_lines":
+                # 行頭に '#' を付けて別行に出力（既存動作）
+                if comment:
+                    output_lines.append(f"# {comment}")
+                if prompt:
+                    output_lines.append(prompt)
+            else:
+                # [:100]で先頭に出力（新規動作）
+                if comment and prompt:
+                    output_lines.append(f"[{comment}:100]{prompt}")
+                elif prompt:
+                    output_lines.append(prompt)
         
         return "\n".join(output_lines)
     

@@ -31,6 +31,7 @@ class MainWindow(QMainWindow):
         self.ui_state = {}              # UI状態記憶用辞書
         self.current_sort = "filename_asc"  # 初期のソート順
         self.preview_mode = "seamless"       # 画像プレビュー表示モード
+        self.output_format = "separate_lines"  # 出力フォーマットの初期値
         # 設定ファイルから値をロード
         self.config_data = ConfigManager.load_config()
         self.current_folder = self.config_data.get("folder", "")
@@ -38,6 +39,7 @@ class MainWindow(QMainWindow):
         self.cache_size = self.config_data.get("cache_size", 1000)
         self.current_sort = self.config_data.get("sort_order", "filename_asc")
         self.preview_mode = self.config_data.get("preview_mode", "seamless")
+        self.output_format = self.config_data.get("output_format", "separate_lines")
         self.thumbnail_cache = ThumbnailCache(max_size=self.cache_size)
         self.image_loader = None
 
@@ -205,8 +207,9 @@ class MainWindow(QMainWindow):
 
     def open_config_dialog(self):
         dialog = ConfigDialog(current_cache_size=self.cache_size,
-                              current_preview_mode=self.preview_mode,
-                              parent=self)
+                            current_preview_mode=self.preview_mode,
+                            current_output_format=self.output_format,
+                            parent=self)
         dialog.exec()
 
     def update_columns_display(self):
@@ -306,14 +309,18 @@ class MainWindow(QMainWindow):
         self.config_data["cache_size"] = self.cache_size
         self.config_data["sort_order"] = self.current_sort
         self.config_data["preview_mode"] = self.preview_mode
+        self.config_data["output_format"] = self.output_format
         ConfigManager.save_config(self.config_data)
 
-    def update_config(self, new_cache_size, new_preview_mode):
+    def update_config(self, new_cache_size, new_preview_mode, new_output_format):
         self.cache_size = new_cache_size
         self.preview_mode = new_preview_mode
+        self.output_format = new_output_format
         self.save_last_values()
         QMessageBox.information(self, "Settings Updated",
-                                f"Cache size: {new_cache_size}\nPreview mode: {new_preview_mode}")
+                            f"Cache size: {new_cache_size}\n"
+                            f"Preview mode: {new_preview_mode}\n"
+                            f"Output format: {'Separate lines' if new_output_format == 'separate_lines' else 'Inline [:100]'}")
 
     def closeEvent(self, event):
         self.save_last_values()
@@ -570,7 +577,7 @@ class MainWindow(QMainWindow):
             return
         
         from modules.wc_creator import WCCreatorDialog
-        dialog = WCCreatorDialog(selected_images, self.thumbnail_cache, self)
+        dialog = WCCreatorDialog(selected_images, self.thumbnail_cache, self.output_format, self)
         dialog.exec()
 
     def restart_application(self):

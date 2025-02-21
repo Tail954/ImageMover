@@ -1,4 +1,3 @@
-# modules/config.py
 import os
 import json
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QGroupBox, QLabel, QLineEdit, QRadioButton, QPushButton, QMessageBox
@@ -22,7 +21,8 @@ class ConfigManager:
             "thumbnail_columns": 5,
             "cache_size": 1000,
             "sort_order": "filename_asc",
-            "preview_mode": "seamless"
+            "preview_mode": "seamless",
+            "output_format": "separate_lines"  # 新規設定: 出力フォーマット
         }
         for key, value in defaults.items():
             if key not in data:
@@ -38,16 +38,19 @@ class ConfigManager:
             print(f"Error saving config: {e}")
 
 class ConfigDialog(QDialog):
-    def __init__(self, current_cache_size, current_preview_mode="seamless", parent=None):
+    def __init__(self, current_cache_size, current_preview_mode="seamless", current_output_format="separate_lines", parent=None):
         super().__init__(parent)
         self.setWindowTitle("Config Settings")
         self.current_cache_size = current_cache_size
         self.current_preview_mode = current_preview_mode
+        self.current_output_format = current_output_format
         self.parent_window = parent
         self.initUI()
 
     def initUI(self):
         layout = QVBoxLayout(self)
+        
+        # Cache Settings
         cache_group = QGroupBox("Cache Settings")
         cache_layout = QVBoxLayout()
         cache_label = QLabel("Cache Size:")
@@ -55,6 +58,9 @@ class ConfigDialog(QDialog):
         cache_layout.addWidget(cache_label)
         cache_layout.addWidget(self.cache_size_input)
         cache_group.setLayout(cache_layout)
+        layout.addWidget(cache_group)
+        
+        # Preview Mode
         display_group = QGroupBox("Preview Mode")
         display_layout = QVBoxLayout()
         self.seamless_radio = QRadioButton("シームレス")
@@ -66,18 +72,35 @@ class ConfigDialog(QDialog):
         display_layout.addWidget(self.seamless_radio)
         display_layout.addWidget(self.wheel_radio)
         display_group.setLayout(display_layout)
+        layout.addWidget(display_group)
+        
+        # Output Format (新規追加)
+        output_format_group = QGroupBox("出力フォーマット")
+        output_format_layout = QVBoxLayout()
+        self.separate_lines_radio = QRadioButton("行頭に '#' を付けて別行に出力")
+        self.inline_format_radio = QRadioButton("[:100]で先頭に出力")
+        if self.current_output_format == "separate_lines":
+            self.separate_lines_radio.setChecked(True)
+        else:
+            self.inline_format_radio.setChecked(True)
+        output_format_layout.addWidget(self.separate_lines_radio)
+        output_format_layout.addWidget(self.inline_format_radio)
+        output_format_group.setLayout(output_format_layout)
+        layout.addWidget(output_format_group)
+        
+        # Apply Button
         apply_button = QPushButton("Apply")
         apply_button.clicked.connect(self.apply_changes)
-        layout.addWidget(cache_group)
-        layout.addWidget(display_group)
         layout.addWidget(apply_button)
 
     def apply_changes(self):
         try:
             new_cache_size = int(self.cache_size_input.text())
             preview_mode = "seamless" if self.seamless_radio.isChecked() else "wheel"
+            output_format = "separate_lines" if self.separate_lines_radio.isChecked() else "inline_format"
+            
             if self.parent_window:
-                self.parent_window.update_config(new_cache_size, preview_mode)
+                self.parent_window.update_config(new_cache_size, preview_mode, output_format)
             self.close()
         except ValueError:
             QMessageBox.warning(self, "Invalid Input", "Please enter a valid number.")
