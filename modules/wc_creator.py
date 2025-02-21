@@ -327,14 +327,22 @@ class OutputDialog(QDialog):
             
             # Generate formatted text
             selected_lines = []
-            if i in self.checkbox_cache:
-                checkboxes = self.checkbox_cache[i]
-                for j, line in enumerate(prompt_lines):
-                    if j < len(checkboxes) and (not self.checked_only or checkboxes[j]):
-                        if line.strip():  # Skip empty lines
-                            selected_lines.append(line)
+            if self.checked_only:
+                # Output Checkedの場合は、チェック状態がキャッシュされている場合のみ行を出力
+                if i in self.checkbox_cache:
+                    checkboxes = self.checkbox_cache[i]
+                    for j, line in enumerate(prompt_lines):
+                        if j < len(checkboxes) and checkboxes[j]:
+                            if line.strip():
+                                selected_lines.append(line)
+                # キャッシュがない場合は、何も追加しない（改行も無し）
+            else:
+                # Output ALLの場合は、必ず全行出力する
+                for line in prompt_lines:
+                    if line.strip():
+                        selected_lines.append(line)
             
-            # Combine without adding commas
+            # Combine without adding extra commas, joined by space
             combined_prompt = " ".join(selected_lines)
             
             # Prompt edit field
