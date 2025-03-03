@@ -51,26 +51,6 @@ WebUI のデフォルト設定で作成される **日付ごとのフォルダ�
    - 既に連番付きファイルがある場合、**続きの番号** から振り直される
 5. `Copy Mode Exit` をクリックで **コピーモード終了**
 
----
-## ワイルドカード作成（Dynamic Prompts 用）
-1. `Copy Mode` は **オフ** にする
-2. サムネイルをクリックして画像を選択
-3. ウィンドウ下の `WC Creator` をクリック
-4. 別ウィンドウが開き、
-   - 左側：選択したサムネイルの1枚目を表示
-   - 右側：ポジティブプロンプトを **行ごとに表示**
-![Image](https://github.com/user-attachments/assets/c41280a8-b132-46c9-8bf1-c147e3c7ced8)
-5. 出力したい行のチェック、コメント追加が可能 [コメント出力フォーマット](#コメント出力フォーマット)
-  - `Output Checked`：チェックされたプロンプトのみをOutput Previewに表示。
-  - `Output All`：チェックは無視してすべてのプロンプトをOutput Previewに表示。
-  - `Clipboard`：チェックされたプロンプトをクリップボードにコピー。
-6. Output Previewウィンドウ
-![Image](https://github.com/user-attachments/assets/b0530e8b-dc81-47e0-9739-cbe39f48b1f1)
-  - 置換機能：Search Stringに検索文字列、Replace Stringに置換文字列を入力し、`Replace` をクリックで一括置換。
-  - 各画像のコメント、プロンプトを編集可能。
-  - `Output` ：txtファイルで出力。
-
----
 ## その他の機能
 ### サムネイル
 - **マウスオーバー** でフォルダパス表示
@@ -93,17 +73,38 @@ WebUI のデフォルト設定で作成される **日付ごとのフォルダ�
 ### `-` `+` ボタン
 - サムネイルの表示列数を変更（中央に現在の列数を表示）
 
-### 設定（Config）
-#### cache size
+---
+## ワイルドカード作成（Dynamic Prompts 用）
+1. `Copy Mode` は **オフ** にする
+2. サムネイルをクリックして画像を選択
+3. ウィンドウ下の `WC Creator` をクリック
+4. 別ウィンドウが開き、
+   - 左側：選択したサムネイルの1枚目を表示
+   - 右側：ポジティブプロンプトを **行ごとに表示**
+![Image](https://github.com/user-attachments/assets/c41280a8-b132-46c9-8bf1-c147e3c7ced8)
+5. 出力したい行のチェック、コメント追加が可能 [コメント出力フォーマット](#コメント出力フォーマット)
+  - `Output Checked`：チェックされたプロンプトのみをOutput Previewに表示。
+  - `Output All`：チェックは無視してすべてのプロンプトをOutput Previewに表示。
+  - `Clipboard`：チェックされたプロンプトをクリップボードにコピー。
+6. Output Previewウィンドウ
+![Image](https://github.com/user-attachments/assets/b0530e8b-dc81-47e0-9739-cbe39f48b1f1)
+  - 置換機能：Search Stringに検索文字列、Replace Stringに置換文字列を入力し、`Replace` をクリックで一括置換。
+  - 各画像のコメント、プロンプトを編集可能。
+  - `Output` ：txtファイルで出力。
+
+---
+
+## 設定（Config）
+### cache size
 - サムネイルのキャッシュ数を変更可能（デフォルト1000）
 - 1000以上の画像ファイルがあり、動作が重いと感じたら画像の枚数以上に増やすと改善するかも（ただしメモリ消費量も増加）
 
-#### Preview mode
+### Preview mode
 - 拡大表示方法を変更可能
 - **シームレス**：ウィンドウサイズに合わせて拡大縮小
 - **ホイール**：Ctrl+スクロールで拡大縮小、ドラッグで移動
 
-#### コメント出力フォーマット
+### コメント出力フォーマット
 - **行頭に '#' を付けて別行に出力** ：**webUIでは表示されない。** プロンプトとは別の行にコメントを出力（プロンプトの上）。
   - txtファイル\
 ![Image](https://github.com/user-attachments/assets/29aa43d9-4f04-47c6-b092-748eeb8dd2b5)
