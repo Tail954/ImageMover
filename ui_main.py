@@ -42,6 +42,7 @@ class MainWindow(QMainWindow):
         self.output_format = self.config_data.get("output_format", "separate_lines")
         self.thumbnail_cache = ThumbnailCache(max_size=self.cache_size)
         self.image_loader = None
+        self.metadata_dialog = None  # MetadataDialog のインスタンスを保持
 
         self.initUI()
 
@@ -322,7 +323,27 @@ class MainWindow(QMainWindow):
                             f"Preview mode: {new_preview_mode}\n"
                             f"Output format: {'Separate lines' if new_output_format == 'separate_lines' else 'Inline [:100]'}")
 
+    def show_metadata_dialog(self, image_path):
+        metadata = extract_metadata(image_path)
+        if not self.metadata_dialog:
+            # 初回表示時のみダイアログを作成
+            from modules.image_dialog import MetadataDialog
+            self.metadata_dialog = MetadataDialog(metadata, self)
+            self.metadata_dialog.setModal(False)  # 非モーダルに設定
+            self.metadata_dialog.show()
+        else:
+            # 既存のダイアログがあれば内容を更新して表示
+            metadata_dict = json.loads(metadata)
+            self.metadata_dialog.positive_edit.setPlainText(metadata_dict.get("positive_prompt", "No positive metadata"))
+            self.metadata_dialog.negative_edit.setPlainText(metadata_dict.get("negative_prompt", "No negative metadata"))
+            self.metadata_dialog.others_edit.setPlainText(metadata_dict.get("generation_info", "No generation info"))
+            if not self.metadata_dialog.isVisible():
+                self.metadata_dialog.show()
+
     def closeEvent(self, event):
+        # アプリケーション終了時にダイアログも閉じる
+        if self.metadata_dialog:
+            self.metadata_dialog.close()
         self.save_last_values()
         super().closeEvent(event)
 
@@ -564,6 +585,7 @@ class MainWindow(QMainWindow):
 
     def extract_metadata(self, image_path):
         return extract_metadata(image_path)
+    
 
     def open_wc_creator(self):
         selected_images = [self.grid_layout.itemAt(i).widget().image_path 

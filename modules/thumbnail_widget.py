@@ -61,10 +61,8 @@ class ImageThumbnail(QLabel):
         elif event.button() == Qt.MouseButton.RightButton:
             main_window = self.get_main_window()
             if main_window:
-                from modules.image_dialog import MetadataDialog
-                metadata = extract_metadata(self.image_path)
-                dialog = MetadataDialog(metadata, main_window)
-                dialog.exec()
+                # MetadataDialog を直接作成せず、MainWindow のメソッドを使用
+                main_window.show_metadata_dialog(self.image_path)
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
