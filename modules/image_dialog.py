@@ -5,11 +5,19 @@ from PyQt6.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout, QHBoxLayo
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 
+import json
+import os
+from PyQt6.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QScrollArea, QWidget, QApplication, QTextEdit
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtCore import Qt
+
 class MetadataDialog(QDialog):
     def __init__(self, metadata, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Metadata")
         metadata_dict = json.loads(metadata)
+        
+        # テキストエリアの設定
         self.positive_edit = QTextEdit(self)
         self.negative_edit = QTextEdit(self)
         self.others_edit = QTextEdit(self)
@@ -19,6 +27,18 @@ class MetadataDialog(QDialog):
         self.positive_edit.setReadOnly(True)
         self.negative_edit.setReadOnly(True)
         self.others_edit.setReadOnly(True)
+        
+        # 選択変更時のシグナルを接続
+        self.positive_edit.selectionChanged.connect(lambda: self.clear_other_selections(self.positive_edit))
+        self.negative_edit.selectionChanged.connect(lambda: self.clear_other_selections(self.negative_edit))
+        self.others_edit.selectionChanged.connect(lambda: self.clear_other_selections(self.others_edit))
+        
+        # フォーカス時の選択解除を追加（保険として）
+        self.positive_edit.focusInEvent = lambda event: self.clear_other_selections(self.positive_edit)
+        self.negative_edit.focusInEvent = lambda event: self.clear_other_selections(self.negative_edit)
+        self.others_edit.focusInEvent = lambda event: self.clear_other_selections(self.others_edit)
+        
+        # レイアウトの設定
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Positive"))
         layout.addWidget(self.positive_edit)
@@ -26,8 +46,36 @@ class MetadataDialog(QDialog):
         layout.addWidget(self.negative_edit)
         layout.addWidget(QLabel("Other"))
         layout.addWidget(self.others_edit)
+        
+        # Clipboard ボタンの追加
+        button_layout = QHBoxLayout()
+        self.clipboard_button = QPushButton("Clipboard")
+        self.clipboard_button.clicked.connect(self.copy_to_clipboard)
+        button_layout.addStretch()
+        button_layout.addWidget(self.clipboard_button)
+        layout.addLayout(button_layout)
+        
         self.setLayout(layout)
         self.setMinimumSize(400, 600)
+
+    def clear_other_selections(self, current_edit):
+        """現在のテキストエリア以外の選択を解除"""
+        for text_edit in [self.positive_edit, self.negative_edit, self.others_edit]:
+            if text_edit != current_edit and text_edit.textCursor().hasSelection():
+                cursor = text_edit.textCursor()
+                cursor.clearSelection()
+                text_edit.setTextCursor(cursor)  # カーソルを更新して選択を解除
+                print(f"Cleared selection in {text_edit.objectName() or 'unnamed'}")  # デバッグ用
+
+    def copy_to_clipboard(self):
+        """選択されたテキストをクリップボードにコピー"""
+        for text_edit in [self.positive_edit, self.negative_edit, self.others_edit]:
+            selected_text = text_edit.textCursor().selectedText()
+            if selected_text:
+                clipboard = QApplication.clipboard()
+                clipboard.setText(selected_text)
+                print(f"Copied: {selected_text}")  # デバッグ用
+                break
 
 class ImageDialog(QDialog):
     def __init__(self, image_path, preview_mode='seamless', parent=None):
