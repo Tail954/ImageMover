@@ -15,6 +15,7 @@ from modules.image_loader import ImageLoader
 from modules.config import ConfigDialog, ConfigManager
 from modules.metadata import extract_metadata
 from modules.thumbnail_widget import ImageThumbnail
+from modules.image_dialog import MetadataDialog
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -272,14 +273,21 @@ class MainWindow(QMainWindow):
             if widget:
                 current_state[widget.image_path] = {"selected": widget.selected, "order": widget.order}
         images_to_sort = self.filter_results if self.filter_results else self.images
+        
+        # 存在するファイルのみを対象に
+        valid_images = [img for img in images_to_sort if os.path.exists(img)]
+        if len(valid_images) < len(images_to_sort):
+            print(f"Missing files detected: {len(images_to_sort) - len(valid_images)} files not found")
+        
         if sort_type == "filename_asc":
-            sorted_images = sorted(images_to_sort, key=lambda x: os.path.basename(x).lower())
+            sorted_images = sorted(valid_images, key=lambda x: os.path.basename(x).lower())
         elif sort_type == "filename_desc":
-            sorted_images = sorted(images_to_sort, key=lambda x: os.path.basename(x).lower(), reverse=True)
+            sorted_images = sorted(valid_images, key=lambda x: os.path.basename(x).lower(), reverse=True)
         elif sort_type == "date_asc":
-            sorted_images = sorted(images_to_sort, key=lambda x: os.path.getmtime(x))
+            sorted_images = sorted(valid_images, key=lambda x: os.path.getmtime(x))
         else:  # date_desc
-            sorted_images = sorted(images_to_sort, key=lambda x: os.path.getmtime(x), reverse=True)
+            sorted_images = sorted(valid_images, key=lambda x: os.path.getmtime(x), reverse=True)
+        
         self.clear_thumbnails()
         self.selection_order = []
         for i, image_path in enumerate(sorted_images):
@@ -326,17 +334,11 @@ class MainWindow(QMainWindow):
     def show_metadata_dialog(self, image_path):
         metadata = extract_metadata(image_path)
         if not self.metadata_dialog:
-            # 初回表示時のみダイアログを作成
-            from modules.image_dialog import MetadataDialog
             self.metadata_dialog = MetadataDialog(metadata, self)
-            self.metadata_dialog.setModal(False)  # 非モーダルに設定
+            self.metadata_dialog.setModal(False)
             self.metadata_dialog.show()
         else:
-            # 既存のダイアログがあれば内容を更新して表示
-            metadata_dict = json.loads(metadata)
-            self.metadata_dialog.positive_edit.setPlainText(metadata_dict.get("positive_prompt", "No positive metadata"))
-            self.metadata_dialog.negative_edit.setPlainText(metadata_dict.get("negative_prompt", "No negative metadata"))
-            self.metadata_dialog.others_edit.setPlainText(metadata_dict.get("generation_info", "No generation info"))
+            self.metadata_dialog.update_metadata(metadata)
             if not self.metadata_dialog.isVisible():
                 self.metadata_dialog.show()
 
@@ -349,6 +351,8 @@ class MainWindow(QMainWindow):
 
     def on_folder_selected(self, index):
         folder_path = self.folder_model.filePath(index)
+        self.filter_results = []  # フィルタ結果をクリア
+        self.filter_box.clear()   # フィルタ入力欄をクリア
         self.load_images_from_folder(folder_path)
 
     def set_ui_enabled(self, enabled):
@@ -401,8 +405,13 @@ class MainWindow(QMainWindow):
 
     def finalize_loading(self, images):
         self.images = images
-        self.sort_images(self.current_sort)
-        self.status_bar.showMessage(f"Total images: {len(self.images)}")
+        self.sort_images(self.current_sort)  # sort_images は self.filter_results が空なら self.images を使用
+        missing_files = [img for img in self.images if not os.path.exists(img)]
+        if missing_files:
+            self.status_bar.showMessage(f"Total images: {len(self.images)}, Missing files: {len(missing_files)}")
+            print(f"Missing files: {missing_files}")
+        else:
+            self.status_bar.showMessage(f"Total images: {len(self.images)}")
         self.set_ui_enabled(True)
         if len(self.images) == 0:
             self.status_bar.showMessage("No images found. Please try again.")
@@ -495,10 +504,7 @@ class MainWindow(QMainWindow):
                 if any(term.lower() in metadata_str.lower() for term in terms):
                     matches.append(image_path)
         self.filter_results = matches
-        self.clear_thumbnails()
-        for i, image_path in enumerate(matches):
-            thumb = ImageThumbnail(image_path, self.thumbnail_cache, self.grid_widget)
-            self.grid_layout.addWidget(thumb, i // self.thumbnail_columns, i % self.thumbnail_columns)
+        self.sort_images(self.current_sort)  # 現在のソート順を適用
         self.status_bar.clearMessage()
         self.filter_button.setEnabled(True)
         self.filter_box.setEnabled(True)
@@ -532,9 +538,10 @@ class MainWindow(QMainWindow):
             return
         renamed_files = []
         selected_images = [self.grid_layout.itemAt(i).widget().image_path 
-                           for i in range(self.grid_layout.count()) 
-                           if self.grid_layout.itemAt(i).widget().selected]
+                        for i in range(self.grid_layout.count()) 
+                        if self.grid_layout.itemAt(i).widget().selected]
         for image_path in selected_images:
+            print(f"Moving: {image_path}")  # ログ追加
             base_name, ext = os.path.splitext(os.path.basename(image_path))
             new_path = os.path.join(folder, base_name + ext)
             counter = 1
@@ -543,12 +550,13 @@ class MainWindow(QMainWindow):
                 counter += 1
             try:
                 os.rename(image_path, new_path)
+                print(f"Moved to: {new_path}")  # ログ追加
             except Exception as e:
                 print(f"Error moving {image_path}: {e}")
             if counter > 1:
                 renamed_files.append(os.path.basename(new_path))
         self.unselect_all()
-        self.filter_box.clear()
+        # self.filter_box.clear() # フィルタ入力がクリア
         self.clear_thumbnails()
         self.image_loader = ImageLoader(self.image_loader.folder, self.thumbnail_cache)
         self.image_loader.update_progress.connect(self.update_image_count)
