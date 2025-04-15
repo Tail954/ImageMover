@@ -549,21 +549,43 @@ class MainWindow(QMainWindow):
                 new_path = os.path.join(folder, f"{base_name}_{counter}{ext}")
                 counter += 1
             try:
-                os.rename(image_path, new_path)
+                # os.rename を shutil.move に変更
+                shutil.move(image_path, new_path)
                 # print(f"Moved to: {new_path}")  # ログ追加
             except Exception as e:
-                print(f"Error moving {image_path}: {e}")
+                # エラーハンドリングを改善（より具体的なエラーメッセージを表示）
+                error_msg = f"Error moving {os.path.basename(image_path)} to {folder}: {e}"
+                print(error_msg)
+                QMessageBox.warning(self, "Move Error", error_msg)
+                # エラーが発生した場合、ループを続けるか中断するかを選択できます
+                # ここでは、次のファイルの処理に進むようにしています
+                continue # 次の画像の処理へ
+
             if counter > 1:
                 renamed_files.append(os.path.basename(new_path))
+
         self.unselect_all()
         # self.filter_box.clear() # フィルタ入力がクリア
         self.clear_thumbnails()
-        self.image_loader = ImageLoader(self.image_loader.folder, self.thumbnail_cache)
-        self.image_loader.update_progress.connect(self.update_image_count)
-        self.image_loader.update_thumbnail.connect(self.add_thumbnail)
-        self.image_loader.finished_loading.connect(self.finalize_loading)
-        self.image_loader.start()
-        self.check_and_remove_empty_folders(self.image_loader.folder)
+
+        # 移動元のフォルダの画像リストを再読み込み
+        # ImageLoader の folder 属性が正しいか確認が必要
+        # もし self.image_loader.folder が None や古い値の場合、self.current_folder を使う
+        source_folder = self.current_folder if hasattr(self, 'current_folder') else ""
+        if source_folder and os.path.exists(source_folder):
+             # ImageLoader を再生成して再読み込み
+            self.image_loader = ImageLoader(source_folder, self.thumbnail_cache)
+            self.image_loader.update_progress.connect(self.update_image_count)
+            self.image_loader.update_thumbnail.connect(self.add_thumbnail)
+            self.image_loader.finished_loading.connect(self.finalize_loading)
+            self.image_loader.start()
+            # 移動元フォルダの空フォルダチェック
+            self.check_and_remove_empty_folders(source_folder)
+        else:
+            print(f"Source folder '{source_folder}' not found or not set. Cannot reload images.")
+            self.status_bar.showMessage("Source folder not found. Please select a folder again.")
+            # 必要であれば、フォルダ選択ダイアログを再度表示するなどの処理を追加
+
         if renamed_files:
             QMessageBox.information(self, "Renamed Files",
                                     "Renamed due to duplicates:\n" + "\n".join(renamed_files))
