@@ -495,7 +495,9 @@ class MainWindow(QMainWindow):
         self.filter_box.setEnabled(False)
         terms = [term.strip() for term in query.split(",") if term.strip()]
         matches = []
-        for image_path in self.images:
+        # 存在する画像のみをフィルタリング対象にする（より安全）
+        valid_images = [img for img in self.images if os.path.exists(img)]
+        for image_path in valid_images: # self.images の代わりに valid_images を使う
             metadata_str = extract_metadata(image_path)
             if self.and_radio.isChecked():
                 if all(term.lower() in metadata_str.lower() for term in terms):
@@ -503,18 +505,35 @@ class MainWindow(QMainWindow):
             else:
                 if any(term.lower() in metadata_str.lower() for term in terms):
                     matches.append(image_path)
+
+        # --- ここから修正 ---
+        if not matches: # 一致する画像がなかった場合
+            self.filter_results = [] # フィルタ結果は空にする
+            self.clear_thumbnails() # サムネイル表示をクリア
+            self.status_bar.showMessage("No matching images found.")
+            # QMessageBox.information(self, "Filter Result", "No matching images found.")
+            # UIを有効に戻す
+            self.filter_button.setEnabled(True)
+            self.filter_box.setEnabled(True)
+            return # ここで処理を終了し、sort_images を呼び出さない
+        # --- ここまで修正 ---
+
+        # 一致する画像があった場合のみ以下を実行
         self.filter_results = matches
-        self.sort_images(self.current_sort)  # 現在のソート順を適用
-        self.status_bar.clearMessage()
+        self.sort_images(self.current_sort)  # 現在のソート順を適用して表示
+        # ステータスバーのメッセージは sort_images 内で更新されるか、ここで更新
+        self.status_bar.showMessage(f"Filtered images: {len(self.filter_results)}") # 件数を表示
         self.filter_button.setEnabled(True)
         self.filter_box.setEnabled(True)
 
     def clear_filter(self):
+        self.filter_box.clear() # フィルタ入力欄もクリア
         self.filter_results = []
-        self.clear_thumbnails()
-        for i, image_path in enumerate(self.images):
-            thumb = ImageThumbnail(image_path, self.thumbnail_cache, self.grid_widget)
-            self.grid_layout.addWidget(thumb, i // self.thumbnail_columns, i % self.thumbnail_columns)
+        # self.clear_thumbnails() # sort_images がクリアするので不要
+        self.sort_images(self.current_sort) # 全画像でソートし直して表示
+        # for i, image_path in enumerate(self.images):
+        #     thumb = ImageThumbnail(image_path, self.thumbnail_cache, self.grid_widget)
+        #     self.grid_layout.addWidget(thumb, i // self.thumbnail_columns, i % self.thumbnail_columns)
 
     def toggle_copy_mode(self):
         self.copy_mode = not self.copy_mode
