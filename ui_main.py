@@ -541,7 +541,7 @@ class MainWindow(QMainWindow):
                         for i in range(self.grid_layout.count()) 
                         if self.grid_layout.itemAt(i).widget().selected]
         for image_path in selected_images:
-            print(f"Moving: {image_path}")  # ログ追加
+            # print(f"Moving: {image_path}")  # ログ追加
             base_name, ext = os.path.splitext(os.path.basename(image_path))
             new_path = os.path.join(folder, base_name + ext)
             counter = 1
@@ -550,7 +550,7 @@ class MainWindow(QMainWindow):
                 counter += 1
             try:
                 os.rename(image_path, new_path)
-                print(f"Moved to: {new_path}")  # ログ追加
+                # print(f"Moved to: {new_path}")  # ログ追加
             except Exception as e:
                 print(f"Error moving {image_path}: {e}")
             if counter > 1:

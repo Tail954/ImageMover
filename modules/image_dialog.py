@@ -195,9 +195,9 @@ class TagTextBrowser(QTextBrowser):
                         self.tag_positions.append((start, i, tag_text))
         
         # デバッグ用
-        print("Detected tags:")
-        for start, end, tag in self.tag_positions:
-            print(f"  '{tag}' at {start}-{end}")
+        # print("Detected tags:")
+        # for start, end, tag in self.tag_positions:
+        #     print(f"  '{tag}' at {start}-{end}")
     
     def get_selected_tags(self):
         # 単にセットを返すのではなく、元の順序を維持した選択タグのリストを返す
@@ -343,7 +343,7 @@ class MetadataDialog(QDialog):
                 if selected_text:
                     clipboard = QApplication.clipboard()
                     clipboard.setText(selected_text)
-                    print(f"Copied: {selected_text}")
+                    # print(f"Copied: {selected_text}")
                     break
         elif current_tab == self.select_tab:
             for browser in [self.select_positive_browser, self.select_negative_browser, self.select_others_browser]:
@@ -358,7 +358,7 @@ class MetadataDialog(QDialog):
                     selected_text = ", ".join(ordered_tags)
                     clipboard = QApplication.clipboard()
                     clipboard.setText(selected_text)
-                    print(f"Copied: {selected_text}")
+                    # print(f"Copied: {selected_text}")
                     break
     
     def clear_all_selections(self):
