@@ -6,16 +6,17 @@ import shutil
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog,
     QStatusBar, QTreeView, QSplitter, QGridLayout, QLineEdit, QLabel, QScrollArea,
-    QButtonGroup, QRadioButton, QMessageBox
+    QButtonGroup, QRadioButton, QMessageBox, QApplication
 )
-from PyQt6.QtCore import Qt, QProcess
-from PyQt6.QtGui import QFileSystemModel
+from PyQt6.QtCore import Qt, QProcess, QUrl
+from PyQt6.QtGui import QFileSystemModel, QScreen
 from modules.thumbnail_cache import ThumbnailCache
 from modules.image_loader import ImageLoader
 from modules.config import ConfigDialog, ConfigManager
 from modules.metadata import extract_metadata
 from modules.thumbnail_widget import ImageThumbnail
 from modules.image_dialog import MetadataDialog
+from modules.drop_window import DropWindow
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -44,6 +45,7 @@ class MainWindow(QMainWindow):
         self.thumbnail_cache = ThumbnailCache(max_size=self.cache_size)
         self.image_loader = None
         self.metadata_dialog = None  # MetadataDialog のインスタンスを保持
+        self.drop_window = None  # ドロップウィンドウのインスタンスを保持
 
         self.initUI()
 
@@ -191,9 +193,14 @@ class MainWindow(QMainWindow):
         self.copy_button = QPushButton("Copy")
         self.copy_button.setEnabled(False)
         self.copy_button.clicked.connect(self.copy_images)
+        # --- ★ ドラッグアンドドロップボタンを追加 ---
+        self.dnd_button = QPushButton("D&&D Window") # ボタンテキスト変更
+        self.dnd_button.setToolTip("画像ファイルをドラッグ＆ドロップしてメタデータを表示するウィンドウを開きます") # ツールチップ追加
+        self.dnd_button.clicked.connect(self.open_drop_window)
         move_copy_layout.addWidget(self.wc_creator_button)
         move_copy_layout.addWidget(self.move_button)
         move_copy_layout.addWidget(self.copy_button)
+        move_copy_layout.addWidget(self.dnd_button) 
         image_layout.addLayout(move_copy_layout)
 
         self.splitter.addWidget(self.image_area_widget)
@@ -206,6 +213,19 @@ class MainWindow(QMainWindow):
         # アプリ起動時は必ずフォルダ選択ダイアログを表示する
         # self.current_folder が空でなければ、そのフォルダを初期値に設定する
         self.load_images()
+
+    def open_drop_window(self):
+        """ドラッグアンドドロップ用の小さなウィンドウを開く"""
+        if self.drop_window is None or not self.drop_window.isVisible():
+            # DropWindow が存在しないか、非表示の場合のみ新しく作成
+            self.drop_window = DropWindow(self) # MainWindowインスタンス(self)を渡す
+            self.drop_window.show()
+            print("ドロップウィンドウを開きました。")
+        else:
+            # 既に表示されている場合は、ウィンドウを最前面に表示してアクティブにする
+            self.drop_window.raise_()
+            self.drop_window.activateWindow()
+            print("ドロップウィンドウをアクティブにしました。")
 
     def open_config_dialog(self):
         dialog = ConfigDialog(current_cache_size=self.cache_size,
@@ -332,17 +352,40 @@ class MainWindow(QMainWindow):
                             f"Output format: {'Separate lines' if new_output_format == 'separate_lines' else 'Inline [:100]'}")
 
     def show_metadata_dialog(self, image_path):
-        metadata = extract_metadata(image_path)
-        if not self.metadata_dialog:
-            self.metadata_dialog = MetadataDialog(metadata, self)
-            self.metadata_dialog.setModal(False)
-            self.metadata_dialog.show()
-        else:
-            self.metadata_dialog.update_metadata(metadata)
-            if not self.metadata_dialog.isVisible():
+        """画像パスを受け取り、メタデータダイアログを表示または更新する"""
+        try:
+            metadata = extract_metadata(image_path)
+            if not metadata:
+                 QMessageBox.warning(self, "メタデータエラー", f"ファイルからメタデータを取得できませんでした:\n{os.path.basename(image_path)}")
+                 return
+
+            # 既存のダイアログがあれば更新、なければ新規作成
+            if self.metadata_dialog and self.metadata_dialog.isVisible():
+                self.metadata_dialog.update_metadata(metadata)
+                # ダイアログを最前面に表示
+                self.metadata_dialog.raise_()
+                self.metadata_dialog.activateWindow()
+            else:
+                # 新規作成時は親を MainWindow (self) に設定
+                self.metadata_dialog = MetadataDialog(metadata, self)
+                self.metadata_dialog.setModal(False) # モーダルレスにする
                 self.metadata_dialog.show()
+                # 新規表示時も最前面に表示
+                self.metadata_dialog.raise_()
+                self.metadata_dialog.activateWindow()
+
+        except FileNotFoundError:
+             QMessageBox.critical(self, "ファイルエラー", f"指定されたファイルが見つかりません:\n{image_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "エラー", f"メタデータ表示中に予期せぬエラーが発生しました:\n{e}")
+            print(f"メタデータ表示エラー: {e}")
 
     def closeEvent(self, event):
+        # ★ 追加: DropWindow が開いていれば閉じる
+        if self.drop_window and self.drop_window.isVisible():
+            print("メインウィンドウ終了に伴い、ドロップウィンドウを閉じます。")
+            self.drop_window.close()
+
         # アプリケーション終了時にダイアログも閉じる
         if self.metadata_dialog:
             self.metadata_dialog.close()

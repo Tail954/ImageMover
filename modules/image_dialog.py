@@ -3,9 +3,10 @@ import json
 import os
 import re
 from PyQt6.QtWidgets import (QDialog, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QTextBrowser, 
-                            QApplication, QScrollArea, QTabWidget, QTextEdit, QWidget)
+                            QApplication, QScrollArea, QTabWidget, QTextEdit, QWidget,
+                            QHBoxLayout)
 from PyQt6.QtGui import QPixmap, QTextCursor, QTextCharFormat, QColor
-from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent
 
 class TagTextBrowser(QTextBrowser):
     tagClicked = pyqtSignal(str)
@@ -387,6 +388,10 @@ class MetadataDialog(QDialog):
             self.select_negative_browser.parse_and_set_text(self.metadata_dict.get("negative_prompt", "No negative metadata"))
             self.select_others_browser.parse_and_set_text(self.metadata_dict.get("generation_info", "No generation info"))
             self.clear_all_selections()
+            # 更新後にダイアログを最前面に表示
+            self.raise_()
+            self.activateWindow()
+
         except Exception as e:
             print(f"Error updating metadata: {e}")
 
