@@ -1,10 +1,14 @@
 # modules/drop_window.py
+# 画像ファイルをドラッグ＆ドロップで受け付け、メタデータ表示をトリガーする小さなウィンドウ。
 import os
+import logging # logging をインポート
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QPushButton, QApplication
 )
 from PyQt6.QtCore import Qt, QUrl, QMimeData, QTimer
 from PyQt6.QtGui import QScreen, QDragEnterEvent, QDropEvent, QDragMoveEvent
+
+logger = logging.getLogger(__name__) # ロガーを取得
 
 # 対応する画像ファイルの拡張子リスト (必要に応じて追加・修正してください)
 IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp', '.heic', '.heif']
@@ -64,7 +68,7 @@ class DropWindow(QWidget):
             margin = 15 # 画面端からのマージン
             self.move(screen_width - window_width - margin, screen_height - window_height - margin)
         except Exception as e:
-            print(f"画面右下への移動中にエラーが発生しました: {e}")
+                logger.error(f"画面右下への移動中にエラーが発生しました: {e}")
 
 
     def dragEnterEvent(self, event: QDragEnterEvent):
@@ -102,19 +106,20 @@ class DropWindow(QWidget):
                 file_path = url.toLocalFile()
                 _, ext = os.path.splitext(file_path)
                 if ext.lower() in IMAGE_EXTENSIONS:
-                    print(f"画像ファイルがドロップされました: {file_path}")
+                    # print(f"画像ファイルがドロップされました: {file_path}") # loggerに置き換え
+                    logger.info(f"画像ファイルがドロップされました: {file_path}")
                     try:
                         # ActionHandler のメソッドを呼び出してメタデータダイアログを表示
                         if self.action_handler:
                             self.action_handler.show_metadata_dialog(file_path)
                             self.label.setText("メタデータを表示しました！")
                             event.acceptProposedAction()
-                        else:
-                            print("Error: ActionHandler not found.")
+                        else: # 通常は発生しないはず
+                            logger.error("ActionHandler not found in DropWindow.")
                             self.label.setText("内部エラーが発生しました。")
                             event.ignore()
                     except Exception as e:
-                        print(f"メタデータ表示中にエラー: {e}")
+                        logger.exception("メタデータ表示中にエラーが発生しました")
                         self.label.setText("メタデータ表示に失敗しました。")
                         event.ignore()
                 else:
@@ -134,5 +139,5 @@ class DropWindow(QWidget):
         # ActionHandler側の参照をクリアする
         if self.action_handler:
             self.action_handler.drop_window = None
-        print("ドロップウィンドウを閉じました。")
+            logger.info("ドロップウィンドウを閉じました。")
         super().closeEvent(event)

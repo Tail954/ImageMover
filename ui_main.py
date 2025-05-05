@@ -1,7 +1,8 @@
-# g:\vscodeGit\ui_main.py
+# \ui_main.py
 import os
 import sys
 import json
+import logging # logging をインポート
 # import shutil # FileManager に移動
 # import re # FileManager に移動
 from PyQt6.QtWidgets import (
@@ -27,6 +28,8 @@ from modules.app_state import AppState # AppState をインポート
 from modules.ui_manager import UIManager # ActionHandler が使う
 from modules.action_handler import ActionHandler # ActionHandler をインポート
 from modules.wc_creator import WCCreatorDialog # ActionHandler が使う
+
+logger = logging.getLogger(__name__) # ロガーを取得
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -59,7 +62,7 @@ class MainWindow(QMainWindow):
             self.action_handler.load_images()
         else:
             # このエラーは ActionHandler の初期化失敗時に発生するはず
-            print("Critical Error: ActionHandler could not be initialized.")
+            logger.critical("ActionHandler could not be initialized.")
 
 
     # initUI メソッドは不要になった

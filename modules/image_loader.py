@@ -1,7 +1,11 @@
 # modules/image_loader.py
+# 指定されたフォルダから画像を非同期で読み込み、サムネイル生成をトリガーするクラス。
 import concurrent.futures
+import logging # logging をインポート
 from pathlib import Path
 from PyQt6.QtCore import QThread, pyqtSignal
+
+logger = logging.getLogger(__name__) # ロガーを取得
 
 class ImageLoader(QThread):
     update_progress = pyqtSignal(int, int)    # (loaded, total)
@@ -42,13 +46,13 @@ class ImageLoader(QThread):
                         if future.result():
                             self.images.append(path)
                             self.update_thumbnail.emit(path, i)
-                    except Exception as e:
-                        print(f"Error processing {path}: {e}")
+                    except Exception:
+                        logger.exception(f"Error processing future for {path}")
                     self.update_progress.emit(i + 1, self.total_files)
             if self._is_running:
                 self.finished_loading.emit(self.images)
         except Exception as e:
-            print(f"Error in image loader: {e}")
+            logger.exception("Error occurred in image loader run method")
 
     def process_image(self, image_path):
         try:

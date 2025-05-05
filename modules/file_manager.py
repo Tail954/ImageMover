@@ -1,15 +1,19 @@
-# g:\vscodeGit\modules\file_manager.py
+# \modules\file_manager.py
+# ファイルの移動、コピー、空フォルダの検索・削除（ゴミ箱へ）を行うクラス。
 import os
 import shutil
 import re
+import logging # logging をインポート
 from pathlib import Path
+
+logger = logging.getLogger(__name__) # ロガーを取得
 
 try:
     from send2trash import send2trash
     SEND2TRASH_AVAILABLE = True
 except ImportError:
     SEND2TRASH_AVAILABLE = False
-    print("Warning: send2trash library not found. Empty folder removal will delete permanently.")
+    logger.warning("send2trash library not found. Empty folder removal will delete permanently.")
 
 class FileManager:
     """ファイル操作（移動、コピー、空フォルダ削除）を担当するクラス"""
@@ -54,7 +58,7 @@ class FileManager:
                     renamed_files.append(os.path.basename(dest_path))
             except Exception as e:
                 error_msg = f"Error moving {os.path.basename(src_path)}: {e}"
-                print(error_msg)
+                logger.error(error_msg)
                 errors.append(error_msg)
 
         return {'moved_count': moved_count, 'renamed_files': renamed_files, 'errors': errors}
@@ -116,7 +120,7 @@ class FileManager:
                 next_number += 1
             except Exception as e:
                 error_msg = f"Error copying {os.path.basename(src_path)}: {e}"
-                print(error_msg)
+                logger.error(error_msg)
                 errors.append(error_msg)
 
         return {'copied_count': copied_count, 'errors': errors}
@@ -140,10 +144,10 @@ class FileManager:
         for dir_path in folder_paths:
             try:
                 send2trash(dir_path)
-                print(f"Moved to trash: {dir_path}")
+                logger.info(f"Moved to trash: {dir_path}")
                 deleted_count += 1
             except Exception as e:
                 error_msg = f"Failed to move to trash {dir_path}: {e}"
-                print(error_msg)
+                logger.error(error_msg)
                 errors.append(error_msg)
         return {'deleted_count': deleted_count, 'errors': errors}

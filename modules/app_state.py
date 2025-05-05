@@ -1,4 +1,5 @@
-# g:\vscodeGit\modules\app_state.py
+# \modules\app_state.py
+# アプリケーション全体で共有される状態（コピーモード、ソート順、列数など）を管理するクラス。
 from PyQt6.QtCore import QObject, pyqtSignal
 
 class AppState(QObject):

@@ -1,6 +1,10 @@
-# g:\vscodeGit\modules\thumbnail_view_controller.py
+# \modules\thumbnail_view_controller.py
+# サムネイル表示グリッドの更新、クリア、選択状態の管理を行うクラス。
 from PyQt6.QtWidgets import QWidget
 from modules.thumbnail_widget import ImageThumbnail
+import logging # logging をインポート
+
+logger = logging.getLogger(__name__) # ロガーを取得
 
 class ThumbnailViewController:
     """サムネイルグリッドの表示更新を担当するクラス"""
@@ -16,9 +20,9 @@ class ThumbnailViewController:
         self.thumbnail_cache = action_handler.thumbnail_cache
 
         if not self.ui_manager:
-            print("Error: UIManager not found via ActionHandler.")
+            logger.error("UIManager not found via ActionHandler.")
         if not self.thumbnail_cache:
-            print("Error: ThumbnailCache not found via ActionHandler.")
+            logger.error("ThumbnailCache not found via ActionHandler.")
 
 
     def clear_thumbnails(self):
@@ -36,7 +40,7 @@ class ThumbnailViewController:
             saved_state (dict): UIManagerが保持するサムネイルの状態
         """
         if not self.thumbnail_cache:
-            print("Error: ThumbnailCache is not available in ThumbnailViewController.")
+            logger.error("ThumbnailCache is not available in ThumbnailViewController.")
             return
 
         self.clear_thumbnails()

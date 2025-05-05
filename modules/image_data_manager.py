@@ -1,7 +1,11 @@
-# g:\vscodeGit\modules\image_data_manager.py
+# \modules\image_data_manager.py
+# 画像パスのリストを管理し、フィルタリングやソートを行うクラス。UIとは独立。
 import os
+import logging # logging をインポート
 from PyQt6.QtCore import QObject, pyqtSignal
 from modules.metadata import extract_metadata # メタデータ抽出関数をインポート
+
+logger = logging.getLogger(__name__) # ロガーを取得
 
 class ImageDataManager(QObject):
     """
@@ -54,7 +58,7 @@ class ImageDataManager(QObject):
                         if any(term in metadata_str_lower for term in terms):
                             matches.append(image_path)
                 except Exception as e:
-                    print(f"Error extracting metadata for {os.path.basename(image_path)} during filter: {e}")
+                    logger.error(f"Error extracting metadata for {os.path.basename(image_path)} during filter: {e}")
                     continue
             self._displayed_images = matches
 

@@ -1,7 +1,9 @@
-# g:\vscodeGit\modules\action_handler.py
+# \modules\action_handler.py
+# ユーザーインターフェースからのアクションを受け取り、関連する処理を実行する中心的なクラス。
 import os
 import sys # restart_application で使う
 import json # save_last_values で使う
+import logging # logging をインポート
 from PyQt6.QtWidgets import QFileDialog, QMessageBox, QApplication
 from PyQt6.QtCore import QProcess # restart_application で使う
 from modules.config import ConfigDialog, ConfigManager # ConfigManager をインポート
@@ -17,6 +19,8 @@ from modules.file_manager import FileManager
 from modules.thumbnail_cache import ThumbnailCache
 from modules.ui_manager import UIManager # UIManager をインポート
 from modules.thumbnail_view_controller import ThumbnailViewController # ThumbnailViewController をインポート
+
+logger = logging.getLogger(__name__) # ロガーを取得
 
 class ActionHandler:
     """
@@ -47,10 +51,6 @@ class ActionHandler:
         self.thumbnail_view_controller = None # ThumbnailViewController は initialize_components で生成
         # --- ここまで ---
 
-        # --- シグナル接続 (一部は initialize_components に移動) ---
-        # self.image_data_manager.images_updated.connect(self._handle_images_updated) # initialize_components へ移動
-        # --- ここまで ---
-
     def initialize_components(self):
         """UIマネージャーとビューコントローラーを初期化し、シグナルを接続する"""
         # UIManager (UI要素の管理)
@@ -64,7 +64,7 @@ class ActionHandler:
                 self.main_window.grid_layout, self.main_window.grid_widget, self # self (ActionHandler) を渡す
             )
         else:
-            print("Error: grid_layout or grid_widget not initialized by UIManager.")
+            logger.error("grid_layout or grid_widget not initialized by UIManager.")
 
         # --- シグナル接続 ---
         # AppState -> UIManager
@@ -72,7 +72,7 @@ class ActionHandler:
             self.app_state.copy_mode_changed.connect(self.ui_manager._handle_copy_mode_change)
             self.app_state.thumbnail_columns_changed.connect(self.ui_manager._handle_thumbnail_columns_change)
         else:
-            print("Error: UIManager not initialized when connecting AppState signals.")
+            logger.error("UIManager not initialized when connecting AppState signals.")
 
         # ImageDataManager -> ActionHandler
         self.image_data_manager.images_updated.connect(self._handle_images_updated)
@@ -82,23 +82,17 @@ class ActionHandler:
             self.ui_manager._connect_signals() # UI要素のシグナルを接続
         # --- ここまで ---
 
-
-    # ThumbnailViewController を外部から設定するためのメソッドは不要になった
-    # def set_thumbnail_view_controller(self, controller):
-    #     self.thumbnail_view_controller = controller
-
     # --- UI Action Handlers ---
-    # (変更なし)
     def open_drop_window(self):
         """ドラッグアンドドロップ用の小さなウィンドウを開く"""
         if self.drop_window is None or not self.drop_window.isVisible():
             self.drop_window = DropWindow(self.main_window, self)
             self.drop_window.show()
-            print("ドロップウィンドウを開きました。")
+            logger.info("ドロップウィンドウを開きました。")
         else:
             self.drop_window.raise_()
             self.drop_window.activateWindow()
-            print("ドロップウィンドウをアクティブにしました。")
+            logger.info("ドロップウィンドウをアクティブにしました。")
 
     def open_config_dialog(self):
         """設定ダイアログを開く"""
@@ -310,7 +304,6 @@ class ActionHandler:
         dialog.exec()
 
     # --- Dialog Showing Methods ---
-    # (変更なし)
     def show_metadata_dialog(self, image_path):
         """画像パスを受け取り、メタデータダイアログを表示または更新する"""
         mw = self.main_window
@@ -333,7 +326,7 @@ class ActionHandler:
              QMessageBox.critical(mw, "ファイルエラー", f"指定されたファイルが見つかりません:\n{image_path}")
         except Exception as e:
             QMessageBox.critical(mw, "エラー", f"メタデータ表示中に予期せぬエラーが発生しました:\n{e}")
-            print(f"メタデータ表示エラー: {e}")
+            logger.exception("メタデータ表示中に予期せぬエラーが発生しました") # 修正: print -> logger.exception
 
     def show_image_dialog(self, image_path):
         """画像パスを受け取り、画像プレビューダイアログを表示または更新する"""
@@ -355,10 +348,9 @@ class ActionHandler:
              QMessageBox.critical(mw, "ファイルエラー", f"指定されたファイルが見つかりません:\n{image_path}")
         except Exception as e:
             QMessageBox.critical(mw, "エラー", f"画像プレビュー表示中に予期せぬエラーが発生しました:\n{e}")
-            print(f"画像プレビュー表示エラー: {e}")
+            logger.exception("画像プレビュー表示中に予期せぬエラーが発生しました") # 修正: print -> logger.exception
 
     # --- Event Handlers ---
-    # (変更なし)
     def on_folder_selected(self, index):
         """ツリービューでフォルダが選択されたときの処理"""
         mw = self.main_window
@@ -370,7 +362,7 @@ class ActionHandler:
                 self.check_and_remove_empty_folders(folder_path)
                 self.load_images_from_folder(folder_path)
             else:
-                print(f"Selected path is not a directory: {folder_path}")
+                logger.warning(f"Selected path is not a directory: {folder_path}") # 修正: print -> logger.warning
 
     def finalize_loading(self, images):
         """画像読み込み完了後の処理 (ImageLoaderから呼ばれる)"""
@@ -381,7 +373,7 @@ class ActionHandler:
         loaded_images = self.image_data_manager.get_displayed_images()
         missing_files = [img for img in images if not os.path.exists(img)]
         if missing_files:
-            print(f"Missing files: {missing_files}")
+            logger.warning(f"Missing files after loading: {missing_files}") # 修正: print -> logger.warning
 
         if self.ui_manager:
             self.ui_manager.set_ui_enabled(True)
@@ -425,7 +417,6 @@ class ActionHandler:
             self.ui_manager.saved_thumbnail_state = {}
 
     # --- Other Logic ---
-    # (変更なし)
     def save_last_values(self):
         """アプリケーション終了時に設定を保存する"""
         mw = self.main_window
@@ -473,7 +464,7 @@ class ActionHandler:
             QMessageBox.warning(mw, "依存関係エラー", "send2trash ライブラリが見つかりません。\n空フォルダの自動削除機能は無効になります。\n`pip install Send2Trash` でインストールしてください。")
         except Exception as e:
             QMessageBox.critical(mw, "エラー", f"空フォルダのチェック中に予期せぬエラーが発生しました:\n{e}")
-            print(f"空フォルダチェックエラー: {e}")
+            logger.exception("空フォルダのチェック中に予期せぬエラーが発生しました") # 修正: print -> logger.exception
 
     def load_images(self):
         """画像フォルダ選択ダイアログを開き、画像を読み込む"""
@@ -503,7 +494,6 @@ class ActionHandler:
         self.image_loader.start()
 
     # --- Thumbnail Click Handler ---
-    # (変更なし)
     def on_thumbnail_clicked(self, thumb_widget):
         """サムネイルがクリックされたときの処理"""
         mw = self.main_window

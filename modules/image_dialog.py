@@ -1,7 +1,9 @@
 # modules/image_dialog.py
+# 画像のメタデータを表示・選択するダイアログと、画像全体を表示・ナビゲートするダイアログ。
 import json
 import os
 import re
+import logging # logging をインポート
 from PyQt6.QtWidgets import (QDialog, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QTextBrowser, 
                             QApplication, QScrollArea, QTabWidget, QTextEdit, QWidget,
                             QHBoxLayout)
@@ -10,6 +12,8 @@ from PyQt6.QtCore import Qt, pyqtSignal, QEvent
 
 class TagTextBrowser(QTextBrowser):
     tagClicked = pyqtSignal(str)
+
+    logger = logging.getLogger(__name__ + ".TagTextBrowser") # ロガーを取得
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -196,11 +200,13 @@ class TagTextBrowser(QTextBrowser):
                         self.tag_positions.append((start, i, tag_text))
         
         # デバッグ用
-        # print("Detected tags:")
+        # self.logger.debug("Detected tags:")
         # for start, end, tag in self.tag_positions:
-        #     print(f"  '{tag}' at {start}-{end}")
+        #     self.logger.debug(f"  '{tag}' at {start}-{end}")
     
     def get_selected_tags(self):
+        if not hasattr(self, 'tag_positions'): # 初期化前に呼ばれる可能性への対応
+            return []
         # 単にセットを返すのではなく、元の順序を維持した選択タグのリストを返す
         ordered_selected_tags = []
         for start, end, tag_text in self.tag_positions:
@@ -209,6 +215,8 @@ class TagTextBrowser(QTextBrowser):
         return ordered_selected_tags
 
 class MetadataDialog(QDialog):
+    logger = logging.getLogger(__name__ + ".MetadataDialog") # ロガーを取得
+
     def __init__(self, metadata, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Metadata")
@@ -344,7 +352,7 @@ class MetadataDialog(QDialog):
                 if selected_text:
                     clipboard = QApplication.clipboard()
                     clipboard.setText(selected_text)
-                    # print(f"Copied: {selected_text}")
+                    # self.logger.debug(f"Copied: {selected_text}")
                     break
         elif current_tab == self.select_tab:
             for browser in [self.select_positive_browser, self.select_negative_browser, self.select_others_browser]:
@@ -359,7 +367,7 @@ class MetadataDialog(QDialog):
                     selected_text = ", ".join(ordered_tags)
                     clipboard = QApplication.clipboard()
                     clipboard.setText(selected_text)
-                    # print(f"Copied: {selected_text}")
+                    # self.logger.debug(f"Copied: {selected_text}")
                     break
     
     def clear_all_selections(self):
@@ -393,9 +401,11 @@ class MetadataDialog(QDialog):
             self.activateWindow()
 
         except Exception as e:
-            print(f"Error updating metadata: {e}")
+            self.logger.exception("Error updating metadata")
 
 class ImageDialog(QDialog):
+    logger = logging.getLogger(__name__ + ".ImageDialog") # ロガーを取得
+
     def __init__(self, image_path, preview_mode='seamless', parent=None):
         super().__init__(parent)
         self.setWindowTitle("Full Image")
@@ -406,8 +416,11 @@ class ImageDialog(QDialog):
         self.parent_window = parent
         
         self.all_images = self.get_all_images()
-        self.current_index = self.all_images.index(image_path) if image_path in self.all_images else 0
-        
+        try:
+            self.current_index = self.all_images.index(image_path) if image_path in self.all_images else 0
+        except ValueError: # リストに画像がない場合
+            self.logger.warning(f"Image path {image_path} not found in the list. Setting index to 0.")
+            self.current_index = 0
         self.layout = QVBoxLayout()
         
         self.tool_layout = QHBoxLayout()
@@ -449,11 +462,11 @@ class ImageDialog(QDialog):
     def get_all_images(self):
         if not self.parent_window:
             return [self.image_path]
-        if hasattr(self.parent_window, 'filter_results') and self.parent_window.filter_results:
-            return self.parent_window.filter_results
-        elif hasattr(self.parent_window, 'images'):
-            return self.parent_window.images
+        # ActionHandler 経由で画像リストを取得
+        if hasattr(self.parent_window, 'action_handler') and self.parent_window.action_handler:
+            return self.parent_window.action_handler.image_data_manager.get_displayed_images()
         else:
+            self.logger.warning("Could not get image list from parent window's ActionHandler.")
             return [self.image_path]
 
     def show_next_image(self):

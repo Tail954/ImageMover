@@ -1,6 +1,8 @@
 # modules/wc_creator.py
+# 選択された画像のプロンプトを編集・選択し、整形して出力するためのダイアログ。
 import os
 from PyQt6.QtWidgets import (
+    QMessageBox, # エラー表示用
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QSplitter, QLabel, 
     QTextEdit, QCheckBox, QScrollArea, QWidget, QLineEdit, 
     QFileDialog, QApplication, QGridLayout
@@ -8,8 +10,11 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
 
+import logging # logging をインポート
+logger = logging.getLogger(__name__) # ロガーを取得
+
 class WCCreatorDialog(QDialog):
-    def __init__(self, selected_images, thumbnail_cache, output_format="separate_lines", parent=None):
+    def __init__(self, selected_images, thumbnail_cache, output_format="separate_lines", parent=None): # parent は MainWindow
         super().__init__(parent)
         self.setWindowTitle("WC Creator")
         self.setGeometry(100, 100, 900, 600)
@@ -123,8 +128,12 @@ class WCCreatorDialog(QDialog):
         
         # Extract and display prompt data
         from modules.metadata import extract_metadata
-        metadata_json = extract_metadata(current_image)
         import json
+        try:
+            metadata_json = extract_metadata(current_image)
+        except Exception as e:
+            logger.error(f"Failed to extract metadata for {current_image}: {e}")
+            metadata_json = "{}" # 空のJSONとして扱う
         metadata = json.loads(metadata_json)
         
         positive_prompt = metadata.get('positive_prompt', '')
@@ -254,7 +263,7 @@ class WCCreatorDialog(QDialog):
         
         # Create and show output dialog
         dialog = OutputDialog(self.selected_images, self.thumbnail_cache, 
-                              self.comment_cache, self.checkbox_state_cache,
+                              self.comment_cache.copy(), self.checkbox_cache.copy(), # 辞書のコピーを渡す
                               checked_only, self.output_format, self)
         dialog.exec()
 
@@ -351,8 +360,12 @@ class OutputDialog(QDialog):
             text_layout.addWidget(prompt_label)
             
             # Get prompt content
-            metadata_json = extract_metadata(image_path)
-            metadata = json.loads(metadata_json)
+            try:
+                metadata_json = extract_metadata(image_path)
+                metadata = json.loads(metadata_json)
+            except Exception as e:
+                logger.error(f"Failed to extract metadata for {image_path} in OutputDialog: {e}")
+                metadata = {} # エラー時は空のメタデータ
             positive_prompt = metadata.get('positive_prompt', '')
             prompt_lines = positive_prompt.split('\n')
             
@@ -443,5 +456,5 @@ class OutputDialog(QDialog):
                 with open(file_path, 'w', encoding='utf-8', newline='\r\n') as f:
                     f.write(output_text)
             except Exception as e:
-                from PyQt6.QtWidgets import QMessageBox
                 QMessageBox.critical(self, "Error", f"Failed to save file: {str(e)}")
+                logger.exception("Failed to save output file")

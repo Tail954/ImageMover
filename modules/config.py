@@ -1,7 +1,11 @@
-# g:\vscodeGit\modules\config.py
+# \modules\config.py
+# アプリケーションの設定（JSONファイル）の読み書きと、設定変更用ダイアログを提供するクラス。
 import os
 import json
+import logging # logging をインポート
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QGroupBox, QLabel, QLineEdit, QRadioButton, QPushButton, QMessageBox
+
+logger = logging.getLogger(__name__) # ロガーを取得
 
 class ConfigManager:
     CONFIG_FILE = "last_value.json"
@@ -13,7 +17,7 @@ class ConfigManager:
                 with open(ConfigManager.CONFIG_FILE, "r") as file:
                     data = json.load(file)
             except Exception as e:
-                print(f"Error loading config: {e}")
+                logger.error(f"Error loading config: {e}")
                 data = {}
         else:
             data = {}
@@ -36,7 +40,7 @@ class ConfigManager:
             with open(ConfigManager.CONFIG_FILE, "w") as file:
                 json.dump(config, file, indent=4)
         except Exception as e:
-            print(f"Error saving config: {e}")
+                logger.error(f"Error saving config: {e}")
 
 class ConfigDialog(QDialog):
     def __init__(self, current_cache_size, current_preview_mode="seamless", current_output_format="separate_lines", parent=None):
@@ -111,4 +115,3 @@ class ConfigDialog(QDialog):
             QMessageBox.warning(self, "Invalid Input", "Please enter a valid number for Cache Size.")
         except Exception as e:
              QMessageBox.critical(self, "Error", f"An error occurred while applying changes: {e}")
-

@@ -1,6 +1,8 @@
-# g:\vscodeGit\modules\ui_manager.py
+# \modules\ui_manager.py
+# MainWindowのUI要素（ボタン、レイアウト、ツリービューなど）の作成、配置、状態管理を担当するクラス。
 import os
 from PyQt6.QtWidgets import (
+    QApplication, # QApplication をインポート
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTreeView, QSplitter,
     QGridLayout, QLineEdit, QLabel, QScrollArea, QButtonGroup, QRadioButton,
     QStatusBar, QApplication # QApplication をインポート
@@ -8,6 +10,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFileSystemModel
 from modules.thumbnail_widget import ImageThumbnail # update_selected_count で使う
+import logging # logging をインポート
+
+logger = logging.getLogger(__name__) # ロガーを取得
 
 class UIManager:
     """MainWindowのUI要素の作成、配置、シグナル接続、状態更新を担当するクラス"""
@@ -319,7 +324,7 @@ class UIManager:
                 mw.tree_view.expand(folder_index)
                 mw.tree_view.scrollTo(folder_index, QTreeView.ScrollHint.PositionAtTop)
             else:
-                 print(f"Warning: Could not find index for folder: {folder}")
+                     logger.warning(f"Could not find index for folder: {folder}")
 
     def show_status_message(self, message, timeout=0):
         """ステータスバーにメッセージを表示する"""
@@ -373,4 +378,3 @@ class UIManager:
             mw.copy_button.setEnabled(is_copy_mode)
         if hasattr(mw, 'wc_creator_button'):
             mw.wc_creator_button.setEnabled(not is_copy_mode)
-

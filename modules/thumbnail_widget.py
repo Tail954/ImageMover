@@ -1,8 +1,12 @@
-# g:\vscodeGit\modules\thumbnail_widget.py
+# \modules\thumbnail_widget.py
+# 個々の画像サムネイルを表示し、クリックや選択状態を管理するカスタムQLabelクラス。
 import os
+import logging # logging をインポート
 from PyQt6.QtWidgets import QLabel
 from PyQt6.QtCore import Qt, pyqtSignal # pyqtSignal をインポート
 from modules.metadata import extract_metadata
+
+logger = logging.getLogger(__name__) # ロガーを取得
 
 THUMBNAIL_SIZE = 200 # 定数として定義 (元のコードにはなかったが、サイズ指定がハードコードされていたため)
 
@@ -46,7 +50,7 @@ class ImageThumbnail(QLabel):
             else:
                 self.setText("Error") # エラーテキスト表示
         except Exception as e:
-            print(f"Error loading thumbnail for {os.path.basename(self.image_path)}: {e}")
+            logger.error(f"Error loading thumbnail for {os.path.basename(self.image_path)}: {e}")
             self.setText("Load Fail") # 失敗テキスト表示
 
     def mousePressEvent(self, event):
@@ -60,7 +64,7 @@ class ImageThumbnail(QLabel):
             if main_window and hasattr(main_window, 'action_handler') and main_window.action_handler:
                 main_window.action_handler.show_metadata_dialog(self.image_path)
             else:
-                print("Error: Could not find MainWindow or ActionHandler for metadata dialog.")
+                logger.error("Could not find MainWindow or ActionHandler for metadata dialog.")
         # 親クラスのイベント処理も呼び出す
         super().mousePressEvent(event)
 

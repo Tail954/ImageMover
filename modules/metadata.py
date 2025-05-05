@@ -1,6 +1,10 @@
 # modules/metadata.py
+# 画像ファイルからメタデータ（特に生成AI関連のパラメータ）を抽出・解析する関数群。
 import json
+import logging # logging をインポート
 from PIL import Image
+
+logger = logging.getLogger(__name__) # ロガーを取得
 
 def decode_exif(exif_data):
     if isinstance(exif_data, bytes):
@@ -13,7 +17,7 @@ def decode_exif(exif_data):
                 except UnicodeDecodeError:
                     return data.decode('utf-16-le')
             else:
-                return exif_data.decode('utf-8', errors='ignore')
+                return exif_data.decode('utf-8', errors='replace') # エラー時に置換文字を使用
         except Exception as e:
             return f"Decode error: {str(e)}"
     return str(exif_data)
@@ -57,7 +61,7 @@ def parse_parameters(text):
             else:
                 params['positive_prompt'] = text.strip()
     except Exception as e:
-        print(f"Error parsing parameters: {e}")
+        logger.error(f"Error parsing parameters: {e}")
     return params
 
 def extract_metadata(image_path):
