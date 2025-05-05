@@ -1,3 +1,4 @@
+# g:\vscodeGit\modules\config.py
 import os
 import json
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QGroupBox, QLabel, QLineEdit, QRadioButton, QPushButton, QMessageBox
@@ -22,7 +23,7 @@ class ConfigManager:
             "cache_size": 1000,
             "sort_order": "filename_asc",
             "preview_mode": "seamless",
-            "output_format": "separate_lines"  # 新規設定: 出力フォーマット
+            "output_format": "separate_lines"
         }
         for key, value in defaults.items():
             if key not in data:
@@ -44,12 +45,12 @@ class ConfigDialog(QDialog):
         self.current_cache_size = current_cache_size
         self.current_preview_mode = current_preview_mode
         self.current_output_format = current_output_format
-        self.parent_window = parent
+        self.parent_window = parent # MainWindow の参照
         self.initUI()
 
     def initUI(self):
         layout = QVBoxLayout(self)
-        
+
         # Cache Settings
         cache_group = QGroupBox("Cache Settings")
         cache_layout = QVBoxLayout()
@@ -59,7 +60,7 @@ class ConfigDialog(QDialog):
         cache_layout.addWidget(self.cache_size_input)
         cache_group.setLayout(cache_layout)
         layout.addWidget(cache_group)
-        
+
         # Preview Mode
         display_group = QGroupBox("Preview Mode")
         display_layout = QVBoxLayout()
@@ -73,8 +74,8 @@ class ConfigDialog(QDialog):
         display_layout.addWidget(self.wheel_radio)
         display_group.setLayout(display_layout)
         layout.addWidget(display_group)
-        
-        # Output Format (新規追加)
+
+        # Output Format
         output_format_group = QGroupBox("出力フォーマット")
         output_format_layout = QVBoxLayout()
         self.separate_lines_radio = QRadioButton("行頭に '#' を付けて別行に出力")
@@ -87,7 +88,7 @@ class ConfigDialog(QDialog):
         output_format_layout.addWidget(self.inline_format_radio)
         output_format_group.setLayout(output_format_layout)
         layout.addWidget(output_format_group)
-        
+
         # Apply Button
         apply_button = QPushButton("Apply")
         apply_button.clicked.connect(self.apply_changes)
@@ -98,9 +99,16 @@ class ConfigDialog(QDialog):
             new_cache_size = int(self.cache_size_input.text())
             preview_mode = "seamless" if self.seamless_radio.isChecked() else "wheel"
             output_format = "separate_lines" if self.separate_lines_radio.isChecked() else "inline_format"
-            
-            if self.parent_window:
-                self.parent_window.update_config(new_cache_size, preview_mode, output_format)
+
+            # MainWindow の ActionHandler の update_config を呼び出す
+            if self.parent_window and hasattr(self.parent_window, 'action_handler') and self.parent_window.action_handler:
+                self.parent_window.action_handler.update_config(new_cache_size, preview_mode, output_format)
+            else:
+                 QMessageBox.warning(self, "Error", "Could not apply changes. Parent window or ActionHandler not found.")
+
             self.close()
         except ValueError:
-            QMessageBox.warning(self, "Invalid Input", "Please enter a valid number.")
+            QMessageBox.warning(self, "Invalid Input", "Please enter a valid number for Cache Size.")
+        except Exception as e:
+             QMessageBox.critical(self, "Error", f"An error occurred while applying changes: {e}")
+

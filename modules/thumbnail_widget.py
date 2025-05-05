@@ -1,79 +1,84 @@
-# modules/thumbnail_widget.py
+# g:\vscodeGit\modules\thumbnail_widget.py
 import os
 from PyQt6.QtWidgets import QLabel
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal # pyqtSignal をインポート
 from modules.metadata import extract_metadata
 
+THUMBNAIL_SIZE = 200 # 定数として定義 (元のコードにはなかったが、サイズ指定がハードコードされていたため)
+
 class ImageThumbnail(QLabel):
+    # クリックシグナルを定義
+    clicked = pyqtSignal(object) # 自分自身 (ImageThumbnail インスタンス) を渡すシグナル
+    doubleClicked = pyqtSignal(object) # ダブルクリックシグナルも定義
+
     def __init__(self, image_path, thumbnail_cache, parent=None):
         super().__init__(parent)
         self.image_path = image_path
         self.thumbnail_cache = thumbnail_cache
         self.selected = False
         self.order = -1
-        self.setFixedSize(200, 200)
-        self.setScaledContents(False)
+        self.setFixedSize(THUMBNAIL_SIZE, THUMBNAIL_SIZE) # 定数を使用
+        self.setScaledContents(False) # アスペクト比を維持するため False が適切
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter) # 中央揃えを追加
         self.load_thumbnail()
-        self.setToolTip(os.path.dirname(image_path))
+        self.setToolTip(os.path.dirname(image_path)) # ツールチップはフォルダパス
+
+        # 選択順序表示用ラベル
         self.order_label = QLabel(self)
-        self.order_label.setStyleSheet("color: white; background-color: black;")
+        self.order_label.setStyleSheet("color: white; background-color: rgba(0, 0, 0, 180); border-radius: 5px; padding: 2px;") # スタイル調整
         self.order_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.order_label.setGeometry(0, 0, 30, 30)
+        self.order_label.setFixedSize(30, 20) # サイズ調整
+        self.order_label.move(5, 5) # 左上に配置
         self.order_label.hide()
 
     def load_thumbnail(self):
         try:
-            pixmap = self.thumbnail_cache.get_thumbnail(self.image_path, 200)
+            # キャッシュからサムネイルを取得
+            pixmap = self.thumbnail_cache.get_thumbnail(self.image_path, THUMBNAIL_SIZE)
             if pixmap:
-                self.setPixmap(pixmap)
+                # QLabelのサイズに合わせてスケーリング（アスペクト比維持）
+                scaled_pixmap = pixmap.scaled(
+                    self.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                self.setPixmap(scaled_pixmap)
             else:
-                self.setText("Error")
+                self.setText("Error") # エラーテキスト表示
         except Exception as e:
-            print(f"Error loading thumbnail: {e}")
-            self.setText("Failed to load thumbnail")
+            print(f"Error loading thumbnail for {os.path.basename(self.image_path)}: {e}")
+            self.setText("Load Fail") # 失敗テキスト表示
 
     def mousePressEvent(self, event):
+        """マウスボタンが押されたときのイベント"""
         if event.button() == Qt.MouseButton.LeftButton:
-            self.selected = not self.selected
-            main_window = self.get_main_window()
-            if main_window:
-                if main_window.copy_mode:
-                    if self.selected:
-                        self.order = len(main_window.selection_order) + 1
-                        main_window.selection_order.append(self)
-                        self.order_label.setText(str(self.order))
-                        self.order_label.show()
-                    else:
-                        try:
-                            main_window.selection_order.remove(self)
-                        except ValueError:
-                            pass
-                        self.order = -1
-                        self.order_label.hide()
-                        for i, thumb in enumerate(main_window.selection_order, start=1):
-                            thumb.order = i
-                            thumb.order_label.setText(str(i))
-                else:
-                    self.order = -1
-                    self.order_label.hide()
-                    main_window.update_selected_count()
-            self.setStyleSheet("border: 3px solid orange;" if self.selected else "")
+            # clicked シグナルを発行 (ActionHandler側で処理するように変更)
+            self.clicked.emit(self)
         elif event.button() == Qt.MouseButton.RightButton:
+            # 右クリックでメタデータダイアログ表示 (ActionHandler経由)
             main_window = self.get_main_window()
-            if main_window:
-                # MetadataDialog を直接作成せず、MainWindow のメソッドを使用
-                main_window.show_metadata_dialog(self.image_path)
+            if main_window and hasattr(main_window, 'action_handler') and main_window.action_handler:
+                main_window.action_handler.show_metadata_dialog(self.image_path)
+            else:
+                print("Error: Could not find MainWindow or ActionHandler for metadata dialog.")
+        # 親クラスのイベント処理も呼び出す
+        super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event):
+        """マウスがダブルクリックされたときのイベント"""
         if event.button() == Qt.MouseButton.LeftButton:
-            main_window = self.get_main_window()
-            if main_window:
-                from modules.image_dialog import ImageDialog
-                dialog = ImageDialog(self.image_path, main_window.preview_mode, main_window)
-                dialog.exec()
+            # doubleClicked シグナルを発行 (MainWindow側で処理するように変更)
+            self.doubleClicked.emit(self)
+        # 親クラスのイベント処理も呼び出す
+        super().mouseDoubleClickEvent(event)
 
     def get_main_window(self):
-        main_window = self.parent()
-        while main_window is not None and not hasattr(main_window, "update_selected_count"):
-            main_window = main_window.parent()
-        return main_window
+        """親ウィジェットを辿って MainWindow インスタンスを取得"""
+        parent = self.parent()
+        while parent is not None:
+            # MainWindow クラスのインスタンスか、特定のメソッドを持っているかで判断
+            # ここでは action_handler を持っているかで判断 (より確実)
+            if hasattr(parent, "action_handler"):
+                return parent
+            parent = parent.parent()
+        return None # 見つからなかった場合

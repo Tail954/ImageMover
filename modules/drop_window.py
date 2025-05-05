@@ -13,15 +13,17 @@ class DropWindow(QWidget):
     """
     画像ファイルのドラッグ＆ドロップを受け付け、メタデータを表示するウィンドウ。
     """
-    def __init__(self, main_window):
+    def __init__(self, main_window, action_handler): # action_handler を受け取る
         """
         コンストラクタ
 
         Args:
             main_window (MainWindow): メインウィンドウのインスタンス参照
+            action_handler (ActionHandler): ActionHandler のインスタンス参照
         """
         super().__init__()
-        self.main_window = main_window # MainWindow の参照を保持
+        self.main_window = main_window # MainWindow の参照を保持 (show_metadata_dialogのため)
+        self.action_handler = action_handler # ActionHandler の参照を保持
         self.initUI()
         self.setAcceptDrops(True) # ドラッグアンドドロップを有効化
 
@@ -32,8 +34,7 @@ class DropWindow(QWidget):
         self.setFixedSize(200, 150)
 
         # 常に最前面に表示し、ツールウィンドウスタイルにする（タスクバーに表示されにくい）
-        # FramelessWindowHint はタイトルバーを消すが、移動できなくなるため注意
-        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool) # | Qt.WindowType.FramelessWindowHint)
+        self.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10) # 内側のマージン
@@ -69,24 +70,20 @@ class DropWindow(QWidget):
     def dragEnterEvent(self, event: QDragEnterEvent):
         """ファイルがウィンドウ上にドラッグされたときのイベント"""
         mime_data = event.mimeData()
-        # ドラッグされたデータがURLリスト（ファイルパス）を持っているか確認
         if mime_data.hasUrls():
-            # 最初のURLを取得
             url = mime_data.urls()[0]
-            # ローカルファイルであり、かつ拡張子が画像のものかチェック
             if url.isLocalFile():
                 file_path = url.toLocalFile()
                 _, ext = os.path.splitext(file_path)
                 if ext.lower() in IMAGE_EXTENSIONS:
-                    event.acceptProposedAction() # ドロップ操作を受け入れる
+                    event.acceptProposedAction()
                     self.label.setText("ドロップしてメタデータを表示...")
-                    return # チェック成功
-        event.ignore() # 受け入れない
-        self.label.setText("ここに画像ファイルを\nドロップしてください") # ラベルを元に戻す
+                    return
+        event.ignore()
+        self.label.setText("ここに画像ファイルを\nドロップしてください")
 
     def dragMoveEvent(self, event: QDragMoveEvent):
         """ファイルがウィンドウ上でドラッグ移動中のイベント"""
-        # dragEnterEventでチェック済みなので、ここでは単純に受け入れる
         event.acceptProposedAction()
 
     def dragLeaveEvent(self, event):
@@ -97,20 +94,25 @@ class DropWindow(QWidget):
     def dropEvent(self, event: QDropEvent):
         """ファイルがウィンドウ上にドロップされたときのイベント"""
         mime_data = event.mimeData()
-        original_text = "ここに画像ファイルを\nドロップしてください" # 元のテキスト
+        original_text = "ここに画像ファイルを\nドロップしてください"
 
         if mime_data.hasUrls():
-            url = mime_data.urls()[0] # 最初のファイルのみ処理
+            url = mime_data.urls()[0]
             if url.isLocalFile():
                 file_path = url.toLocalFile()
                 _, ext = os.path.splitext(file_path)
                 if ext.lower() in IMAGE_EXTENSIONS:
                     print(f"画像ファイルがドロップされました: {file_path}")
                     try:
-                        # MainWindow のメソッドを呼び出してメタデータダイアログを表示
-                        self.main_window.show_metadata_dialog(file_path)
-                        self.label.setText("メタデータを表示しました！")
-                        event.acceptProposedAction()
+                        # ActionHandler のメソッドを呼び出してメタデータダイアログを表示
+                        if self.action_handler:
+                            self.action_handler.show_metadata_dialog(file_path)
+                            self.label.setText("メタデータを表示しました！")
+                            event.acceptProposedAction()
+                        else:
+                            print("Error: ActionHandler not found.")
+                            self.label.setText("内部エラーが発生しました。")
+                            event.ignore()
                     except Exception as e:
                         print(f"メタデータ表示中にエラー: {e}")
                         self.label.setText("メタデータ表示に失敗しました。")
@@ -125,14 +127,12 @@ class DropWindow(QWidget):
             self.label.setText("無効なデータです。")
             event.ignore()
 
-        # ドロップ操作後、少し遅れてラベルを元のテキストに戻す
         QTimer.singleShot(2000, lambda: self.label.setText(original_text))
 
     def closeEvent(self, event):
         """ウィンドウが閉じられるときのイベント"""
-        # MainWindow側の参照をクリアする
-        if self.main_window:
-            self.main_window.drop_window = None
+        # ActionHandler側の参照をクリアする
+        if self.action_handler:
+            self.action_handler.drop_window = None
         print("ドロップウィンドウを閉じました。")
         super().closeEvent(event)
-
