@@ -24,7 +24,7 @@ class ConfigManager:
         defaults = {
             "folder": "",
             "thumbnail_columns": 5,
-            "cache_size": 1000,
+            "cache_size": 10000,
             "sort_order": "filename_asc",
             "preview_mode": "seamless",
             "output_format": "separate_lines"

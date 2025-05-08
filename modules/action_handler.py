@@ -128,7 +128,15 @@ class ActionHandler:
     def sort_images(self, sort_type):
         """指定されたタイプで画像をソートする"""
         mw = self.main_window
-        if not self.ui_manager: return
+        if not self.ui_manager:
+            logger.warning("UIManager not available in sort_images.")
+            return
+
+        logger.info(f"Starting sort images by: {sort_type}")
+        self.ui_manager.show_status_message(f"Sorting images by {sort_type}...")
+        self.ui_manager.set_ui_enabled(False) # UIを無効化
+        QApplication.processEvents() # UI更新を即時反映
+
         self.app_state.current_sort = sort_type
         current_state = {}
         if hasattr(mw, 'grid_layout'):
@@ -136,8 +144,9 @@ class ActionHandler:
                 widget = mw.grid_layout.itemAt(i).widget()
                 if widget and isinstance(widget, ImageThumbnail):
                     current_state[widget.image_path] = {"selected": widget.selected, "order": widget.order}
-        self.ui_manager.saved_thumbnail_state = current_state
+        self.ui_manager.saved_thumbnail_state = current_state # UIManagerに状態を保存
         self.image_data_manager.sort(self.app_state.current_sort)
+        # images_updated シグナルにより _handle_images_updated が呼ばれ、そこでUIが再度有効化される
 
     def filter_images(self):
         """フィルターボックスの内容に基づいて画像をフィルタリングする"""
@@ -145,8 +154,9 @@ class ActionHandler:
         if not hasattr(mw, 'filter_box') or not self.ui_manager: return
         query = mw.filter_box.text()
         self.ui_manager.show_status_message("Filtering...")
-        self.ui_manager.set_ui_enabled(False)
-        QApplication.processEvents()
+        self.ui_manager.set_ui_enabled(False) # UIを無効化
+        QApplication.processEvents() # UI更新を即時反映
+        logger.info(f"Starting filter with query: '{query}'")
 
         if hasattr(mw, 'grid_layout'):
             current_state = {}
@@ -154,13 +164,13 @@ class ActionHandler:
                 widget = mw.grid_layout.itemAt(i).widget()
                 if widget and isinstance(widget, ImageThumbnail):
                     current_state[widget.image_path] = {"selected": widget.selected, "order": widget.order}
-        self.ui_manager.saved_thumbnail_state = current_state
+        self.ui_manager.saved_thumbnail_state = current_state # UIManagerに状態を保存
 
         mode_is_and = mw.and_radio.isChecked() if hasattr(mw, 'and_radio') else True
         terms = [term.strip().lower() for term in query.split(",") if term.strip()]
         self.image_data_manager.filter(terms, mode_is_and)
-
-        self.ui_manager.set_ui_enabled(True)
+        # images_updated シグナルにより _handle_images_updated が呼ばれ、そこでUIが再度有効化される
+        # self.ui_manager.set_ui_enabled(True) # ここでの有効化は不要
 
     def toggle_copy_mode(self):
         """コピーモードを切り替える"""
@@ -369,7 +379,7 @@ class ActionHandler:
         mw = self.main_window
         if hasattr(mw, 'filter_box'): mw.filter_box.clear()
         self.image_data_manager.set_images(images)
-        self.image_data_manager.sort(self.app_state.current_sort)
+        # logger.info(f"Finalize loading: Initial sort by '{self.app_state.current_sort}' handled by set_images.")
         loaded_images = self.image_data_manager.get_displayed_images()
         missing_files = [img for img in images if not os.path.exists(img)]
         if missing_files:
@@ -406,6 +416,7 @@ class ActionHandler:
     # --- Signal Handlers / Slots ---
 
     def _handle_images_updated(self, image_list):
+        # logger.info(f"ActionHandler._handle_images_updated called with {len(image_list)} images. Triggering ThumbnailViewController.update_display.")
         """ImageDataManagerからの更新通知を受けて、ViewControllerに表示更新を依頼する"""
         if self.thumbnail_view_controller and self.ui_manager:
             self.thumbnail_view_controller.update_display(
@@ -415,6 +426,10 @@ class ActionHandler:
                 self.app_state.copy_mode
             )
             self.ui_manager.saved_thumbnail_state = {}
+            # サムネイル表示完了後にUIを有効化
+            self.ui_manager.set_ui_enabled(True)
+            self.ui_manager.update_selected_count() # ステータスバーも更新
+            # logger.info("Finished handling images_updated, UI re-enabled.")
 
     # --- Other Logic ---
     def save_last_values(self):

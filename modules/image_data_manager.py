@@ -83,6 +83,7 @@ class ImageDataManager(QObject):
             self._displayed_images = sorted(valid_images_to_sort, key=lambda x: os.path.getmtime(x), reverse=True)
 
         if emit_signal:
+            # logger.info(f"Emitting images_updated signal from sort method. Sort type: {sort_type}. Displayed images count: {len(self._displayed_images)}")
             self.images_updated.emit(list(self._displayed_images)) # 更新されたリストのコピーをシグナルで送る
 
     def remove_paths(self, paths_to_remove):

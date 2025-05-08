@@ -21,10 +21,10 @@ class ThumbnailCache:
         cache_key = f"{image_path}_{size}"
         with self.lock:
             if cache_key in self.cache:
-                # logger.debug(f"Cache hit for: {cache_key}") # デバッグ用
+                # logger.debug(f"Cache hit for: {cache_key}")
                 return self.cache[cache_key]
 
-        # logger.debug(f"Cache miss for: {cache_key}, generating...") # デバッグ用
+        # logger.debug(f"Cache miss for: {cache_key}, generating...")
         try:
             image = QImage(image_path)
             if image.isNull():
@@ -42,7 +42,7 @@ class ThumbnailCache:
                     try:
                         oldest_key = next(iter(self.cache))
                         del self.cache[oldest_key]
-                        # logger.debug(f"Cache full, removed oldest: {oldest_key}") # デバッグ用
+                        # logger.debug(f"Cache full, removed oldest: {oldest_key}")
                     except StopIteration:
                         pass # キャッシュが空の場合は何もしない
                 self.cache[cache_key] = pixmap
@@ -63,29 +63,29 @@ class ThumbnailCache:
             if cache_key in self.cache:
                 try:
                     del self.cache[cache_key]
-                    # logger.debug(f"Removed from cache: {cache_key}") # デバッグ用
+                    # logger.debug(f"Removed from cache: {cache_key}")
                 except KeyError:
                     # ほぼ起こらないはずだが念のため
                     logger.warning(f"KeyError during remove: {cache_key}")
             # else:
-                # logger.debug(f"Key not found in cache for removal: {cache_key}") # デバッグ用
+                # logger.debug(f"Key not found in cache for removal: {cache_key}")
 
     def clear(self):
         """キャッシュをすべてクリアする"""
         with self.lock:
             self.cache.clear()
-            # logger.debug("Cache cleared.") # デバッグ用
+            # logger.debug("Cache cleared.")
 
     def resize(self, new_max_size):
         """キャッシュの最大サイズを変更し、必要なら古いエントリを削除する"""
         with self.lock:
             self.max_size = new_max_size
-            # logger.debug(f"Cache max size resized to: {new_max_size}") # デバッグ用
+            # logger.debug(f"Cache max size resized to: {new_max_size}")
             # サイズオーバーしている分を削除
             while len(self.cache) > self.max_size:
                 try:
                     oldest_key = next(iter(self.cache))
                     del self.cache[oldest_key]
-                    # logger.debug(f"Cache resized, removed oldest: {oldest_key}") # デバッグ用
+                    # logger.debug(f"Cache resized, removed oldest: {oldest_key}")
                 except StopIteration:
                     break # キャッシュが空になったらループ終了
