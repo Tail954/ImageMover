@@ -1,3 +1,8 @@
+>[!WARNING]
+>開発は終了しています。
+>[ImageManager](https://github.com/Tail954/ImageManager)をご利用ください。
+
+
 ## 更新履歴
 - 2025/04/15   ドライブをまたいで移動できない、Filterに一致する画像が無い場合すべて表示される問題を修正
 - 2025/03/25   メタデータダイアログにSelectタブ追加
