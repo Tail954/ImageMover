@@ -1,5 +1,5 @@
 >[!WARNING]
->開発は終了しています。
+>開発は終了しました。
 >[ImageManager](https://github.com/Tail954/ImageManager)をご利用ください。
 
 
